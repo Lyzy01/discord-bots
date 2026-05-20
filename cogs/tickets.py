@@ -241,15 +241,19 @@ class AppealButtonView(discord.ui.View):
 class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Start background streaming loop to feed live website counters
-        self.update_web_metrics.start()
 
-    def cog_unload(self):
+    async def cog_load(self):
+        # This is the proper, safe place to launch tasks once the cog is fully bound
+        if not self.update_web_metrics.is_running():
+            self.update_web_metrics.start()
+
+    async def cog_unload(self):
         self.update_web_metrics.cancel()
 
     # LOOP TASK: Recalculate stats every 10 seconds and push to Flask web panel
     @tasks.loop(seconds=10)
     async def update_web_metrics(self):
+        # Safe check to make sure the bot is fully logged in before scanning servers
         if not self.bot.is_ready():
             return
             
@@ -257,7 +261,7 @@ class Tickets(commands.Cog):
             total_servers = len(self.bot.guilds)
             total_members = sum(g.member_count for g in self.bot.guilds if g.member_count)
             
-            # Directly mutate the live website data stream
+            # Mutate the live website parameters safely
             keep_alive.LIVE_STATS["servers"] = total_servers
             keep_alive.LIVE_STATS["users"] = total_members
             keep_alive.LIVE_STATS["processed"] = processed_cases_counter
@@ -265,6 +269,7 @@ class Tickets(commands.Cog):
             print(f"Metrics Sync Error: {e}")
 
     @app_commands.command(name="adduiplayerreport", description="Deploy the custom incident reporting layout center")
+    @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_report(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if interaction.user.name != OWNER_USERNAME: 
             return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
@@ -274,6 +279,7 @@ class Tickets(commands.Cog):
         await interaction.followup.send("✅ Security interface deployed!", ephemeral=True)
 
     @app_commands.command(name="adduiappealban", description="Deploy the custom account restriction appeal desk")
+    @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_appeal(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if interaction.user.name != OWNER_USERNAME: 
             return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
