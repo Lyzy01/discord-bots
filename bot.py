@@ -207,5 +207,14 @@ async def on_ready():
     except Exception as error:
         print(f"Encountered an internal setup sync conflict error: {error}")
 
-# Run utilizing your secret application token parameters
-bot.run("YOUR_BOT_TOKEN_HERE")
+import os
+
+# ... rest of your code ...
+
+# Retrieve the secret token securely from the hosting platform's environment variables
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("❌ CRITICAL ERROR: 'DISCORD_TOKEN' environment variable was not found.")
