@@ -17,11 +17,27 @@ status_rotation = itertools.cycle([
 async def on_ready():
     print(f"🤖 Connected successfully as: {bot.user.name}")
     
+    # --- SAFE EXTENSION MOUNTING ---
+    # We load cogs right here when the bot client is fully operational
+    print("📂 Scanning and mounting cog extensions...")
+    for filename in os.listdir("./cogs"):
+        if filename.endswith(".py") and not filename.startswith("__"):
+            # Check if it's already loaded to prevent duplicate load errors on reconnects
+            cog_name = f"cogs.{filename[:-3]}"
+            if cog_name not in bot.extensions:
+                try:
+                    await bot.load_extension(cog_name)
+                    print(f"📦 Successfully mounted cog module: {filename}")
+                except Exception as e:
+                    print(f"❌ Failed loading cog module {filename}: {e}")
+    
     # Make sure background status rotation loops are armed
     if not change_status.is_running():
         change_status.start()
         
+    # Sync the commands AFTER all cogs are successfully mounted
     try:
+        print("🔄 Syncing slash command tree with Discord...")
         synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} slash commands globally!")
     except Exception as e:
@@ -31,20 +47,9 @@ async def on_ready():
 async def change_status():
     await bot.change_presence(activity=discord.Game(next(status_rotation)))
 
-async def load_cogs():
-    # Automatically loop through and mount all files inside your cogs directory
-    for filename in os.listdir("./cogs"):
-        if filename.endswith(".py") and not filename.startswith("__"):
-            try:
-                await bot.load_extension(f"cogs.{filename[:-3]}")
-                print(f"📦 Successfully mounted cog module: {filename}")
-            except Exception as e:
-                print(f"❌ Failed loading cog module {filename}: {e}")
-
 async def main():
     keep_alive()
-    await load_cogs()
-    # Pulls token environment safely from your Render environment variables dashboard
+    # Start the bot directly; loading and syncing are now handled cleanly on boot inside on_ready
     await bot.start(os.getenv("DISCORD_TOKEN"))
 
 if __name__ == "__main__":
