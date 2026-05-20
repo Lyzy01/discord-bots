@@ -241,30 +241,33 @@ class AppealButtonView(discord.ui.View):
 class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-    async def cog_load(self):
         # Start background streaming loop to feed live website counters
-        if not self.update_web_metrics.is_running():
-            self.update_web_metrics.start()
+        self.update_web_metrics.start()
 
-    async def cog_unload(self):
+    def cog_unload(self):
         self.update_web_metrics.cancel()
 
-    # LOOP TASK: Recalculate total user states every 10 seconds and push to Flask web panel
+    # LOOP TASK: Recalculate stats every 10 seconds and push to Flask web panel
     @tasks.loop(seconds=10)
     async def update_web_metrics(self):
-        await self.bot.wait_until_ready()
-        
-        total_members = sum(g.member_count for g in self.bot.guilds if g.member_count)
-        
-        # Mutate the global Flask layout parameters inside keep_alive
-        keep_alive.LIVE_STATS["servers"] = len(self.bot.guilds)
-        keep_alive.LIVE_STATS["users"] = total_members
-        keep_alive.LIVE_STATS["processed"] = processed_cases_counter
+        if not self.bot.is_ready():
+            return
+            
+        try:
+            total_servers = len(self.bot.guilds)
+            total_members = sum(g.member_count for g in self.bot.guilds if g.member_count)
+            
+            # Directly mutate the live website data stream
+            keep_alive.LIVE_STATS["servers"] = total_servers
+            keep_alive.LIVE_STATS["users"] = total_members
+            keep_alive.LIVE_STATS["processed"] = processed_cases_counter
+        except Exception as e:
+            print(f"Metrics Sync Error: {e}")
 
     @app_commands.command(name="adduiplayerreport", description="Deploy the custom incident reporting layout center")
     async def add_ui_report(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if interaction.user.name != OWNER_USERNAME: return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
+        if interaction.user.name != OWNER_USERNAME: 
+            return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title="🛡️ Integrity Operations Center", description="See someone breaking guidelines or using exploits? Click below to brief our staff agents.", color=discord.Color.dark_red())
         await channel.send(embed=embed, view=ReportButtonView())
@@ -272,7 +275,8 @@ class Tickets(commands.Cog):
 
     @app_commands.command(name="adduiappealban", description="Deploy the custom account restriction appeal desk")
     async def add_ui_appeal(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if interaction.user.name != OWNER_USERNAME: return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
+        if interaction.user.name != OWNER_USERNAME: 
+            return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title="⚖️ Enforcement Appeal Operations", description="If an action was taken against your account in error, present your arguments below.", color=discord.Color.from_rgb(32, 34, 37))
         await channel.send(embed=embed, view=AppealButtonView())
