@@ -22,14 +22,14 @@ async def on_ready():
     await bot.change_presence(activity=discord.Game(name="Watching over the server 👀"))
 
 async def load_cogs():
-    # Loading all 5 cogs cleanly
-    for cog in ['general', 'moderation', 'fun', 'music', 'ai']:
+    # Added 'admin' directly into your deployment list
+    for cog in ['general', 'moderation', 'fun', 'music', 'ai', 'admin']:
         try:
             await bot.load_extension(f'cogs.{cog}')
             print(f"📁 Cog Loaded: {cog}")
         except Exception as e:
             print(f"❌ Failed to load cog [{cog}]: {e}")
-
+            
 async def main():
     async with bot:
         await load_cogs()
