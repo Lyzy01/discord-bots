@@ -54,7 +54,7 @@ async def send_audit_archive(guild: discord.Guild, title: str, user: discord.Use
         print(f"Failed to post receipt into audit vault: {e}")
 
 # =================================================================
-# THE THREE-BUTTON STAFF CONTROL PANEL
+# THE THREE-BUTTON STAFF CONTROL PANEL (CRASH-PROOF REVIEWED)
 # =================================================================
 class StaffControlPanel(discord.ui.View):
     def __init__(self, target_user: discord.User, ticket_type: str, raw_fields: dict):
@@ -69,7 +69,9 @@ class StaffControlPanel(discord.ui.View):
         if not is_authorized_staff(interaction):
             return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
         
-        await interaction.response.send_message("⚙️ *Processing case approval actions...*")
+        # FIX: Defer immediately to completely block "Interaction Failed" errors
+        await interaction.response.defer()
+        
         processed_cases_counter += 1
         
         if self.ticket_type == "Incident":
@@ -77,13 +79,19 @@ class StaffControlPanel(discord.ui.View):
         else:
             msg = "⚖️ **Ly's Review Desk Notice:** Excellent news! Your enforcement appeal has been formally **APPROVED** upon review. Your account status is being restored."
 
-        try: await self.target_user.send(msg)
-        except discord.Forbidden: pass
+        try: 
+            await self.target_user.send(msg)
+        except discord.Forbidden: 
+            pass
 
+        # Heavy logging actions run smoothly because the interaction is safely deferred
         await send_audit_archive(interaction.guild, f"{self.ticket_type} Approval", self.target_user, self.raw_fields, "APPROVED", interaction.user)
         
-        await asyncio.sleep(2)
-        await interaction.channel.delete()
+        await asyncio.sleep(1)
+        try:
+            await interaction.channel.delete()
+        except Exception as e:
+            print(f"Failed to delete channel: {e}")
 
     @discord.ui.button(label="❌ Deny Case", style=discord.ButtonStyle.danger, custom_id="panel_deny_case")
     async def deny_case(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -91,7 +99,9 @@ class StaffControlPanel(discord.ui.View):
         if not is_authorized_staff(interaction):
             return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
         
-        await interaction.response.send_message("⚙️ *Processing case denial actions...*")
+        # FIX: Defer immediately to give the bot unlimited thinking time
+        await interaction.response.defer()
+        
         processed_cases_counter += 1
         
         if self.ticket_type == "Incident":
@@ -99,26 +109,37 @@ class StaffControlPanel(discord.ui.View):
         else:
             msg = "⚖️ **Ly's Review Desk Notice:** Your enforcement appeal has been reviewed and **DENIED**. The restriction penalty remains absolute."
 
-        try: await self.target_user.send(msg)
-        except discord.Forbidden: pass
+        try: 
+            await self.target_user.send(msg)
+        except discord.Forbidden: 
+            pass
 
         await send_audit_archive(interaction.guild, f"{self.ticket_type} Rejection", self.target_user, self.raw_fields, "DENIED", interaction.user)
 
-        await asyncio.sleep(2)
-        await interaction.channel.delete()
+        await asyncio.sleep(1)
+        try:
+            await interaction.channel.delete()
+        except Exception as e:
+            print(f"Failed to delete channel: {e}")
 
     @discord.ui.button(label="🔒 Cancel Session", style=discord.ButtonStyle.secondary, custom_id="panel_cancel_session")
     async def cancel_session(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_authorized_staff(interaction):
             return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
         
-        await interaction.response.send_message("⚙️ *Terminating data corridor instantly...*")
+        # FIX: Defer immediately
+        await interaction.response.defer()
+        
         await send_audit_archive(interaction.guild, f"{self.ticket_type} Wiped", self.target_user, self.raw_fields, "TERMINATED/CANCELLED", interaction.user)
-        await asyncio.sleep(2)
-        await interaction.channel.delete()
+        
+        await asyncio.sleep(1)
+        try:
+            await interaction.channel.delete()
+        except Exception as e:
+            print(f"Failed to delete channel: {e}")
 
 # =================================================================
-# THE POP-UP FORMS (MODALS) WITH SECURE STAFF AI SEPARATION
+# POP-UP MODALS WITH SECURED STAFF-ONLY AI CHANNELS
 # =================================================================
 class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
     username = discord.ui.TextInput(label="Target Player Account", placeholder="Username of the rule-breaker", required=True)
@@ -139,9 +160,9 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
             if any(k in role.name.lower() for k in admin_keywords):
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
+        # Create ticket room visible to user and staff
         channel = await guild.create_text_channel(name=f"incident-{interaction.user.name}", overwrites=overwrites)
         
-        # User & Staff visible layout embed
         embed = discord.Embed(title="🛡️ Security Core: Live Incident Logged", color=discord.Color.dark_orange())
         embed.add_field(name="👤 Flagged Account", value=f"`{self.username.value}`", inline=False)
         embed.add_field(name="📝 Situation Report", value=self.reason.value, inline=False)
@@ -153,14 +174,7 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
         await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Incident", raw_fields=saved_fields))
         await interaction.followup.send(f"✅ Case registered! Secure channel opened: {channel.mention}", ephemeral=True)
 
-        # Post a hidden/loading AI placeholder that only warns staff members
-        ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Evaluation", description="⏳ *Analyzing report context via Groq clusters...*", color=discord.Color.blurple())
-        ai_embed.set_footer(text="⚠️ Confidential Configuration Notice: Visible only to server handlers.")
-        
-        # Using a special text string flag to target staff view or clear mention tags
-        staff_mention_str = " ".join([role.mention for role in guild.roles if any(k in role.name.lower() for k in admin_keywords)])
-        ai_msg = await channel.send(content=f"||🔒 **Staff Alert Data Block** ||\n{staff_mention_str}", embed=ai_embed)
-
+        # Secretly dispatch AI data routing straight to hidden staff log channel
         async def fetch_ai_assessment():
             try:
                 loop = asyncio.get_event_loop()
@@ -172,7 +186,7 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
                         f"Give a short 2-sentence feedback label summary telling staff if it seems real, missing clear facts, or potentially spam."
                     )
                     completion = client.chat.completions.create(
-                        model="llama3-8b-8192", # Correct up-to-date fast production model name
+                        model="llama-3.1-8b-instant",  # PRODUCTION FAST MODEL ID
                         messages=[{"role": "user", "content": ai_prompt}],
                         temperature=0.4,
                         max_tokens=150
@@ -183,8 +197,12 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
             except Exception as e:
                 ai_assessment = f"⚠️ *AI triage processing error: {e}*"
 
-            ai_embed.description = f"*{ai_assessment}*"
-            await ai_msg.edit(embed=ai_embed)
+            # Route straight into hidden audit vault channel
+            log_channel = discord.utils.get(guild.text_channels, name="staff-audit-logs")
+            if log_channel:
+                ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Triage", description=f"**Target Case Room:** {channel.mention}\n\n**AI Analysis:**\n*{ai_assessment}*", color=discord.Color.blurple())
+                ai_embed.set_footer(text=f"Submitted by {interaction.user.name} | Confidential Staff View Only")
+                await log_channel.send(embed=ai_embed)
 
         asyncio.create_task(fetch_ai_assessment())
 
@@ -207,6 +225,7 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
             if any(k in role.name.lower() for k in admin_keywords):
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
+        # Create ticket room visible to user and staff
         channel = await guild.create_text_channel(name=f"review-{interaction.user.name}", overwrites=overwrites)
         
         embed = discord.Embed(title="⚖️ Enforcement Review Docket Initiated", color=discord.Color.teal())
@@ -220,13 +239,7 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
         await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Review", raw_fields=saved_fields))
         await interaction.followup.send(f"✅ Review request sent! Data room opened: {channel.mention}", ephemeral=True)
 
-        # Separate Confidential AI block
-        ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Evaluation", description="⏳ *Analyzing defense context via Groq clusters...*", color=discord.Color.blurple())
-        ai_embed.set_footer(text="⚠️ Confidential Configuration Notice: Visible only to server handlers.")
-        
-        staff_mention_str = " ".join([role.mention for role in guild.roles if any(k in role.name.lower() for k in admin_keywords)])
-        ai_msg = await channel.send(content=f"||🔒 **Staff Alert Data Block** ||\n{staff_mention_str}", embed=ai_embed)
-
+        # Secretly dispatch AI data routing straight to hidden staff log channel
         async def fetch_ai_assessment():
             try:
                 loop = asyncio.get_event_loop()
@@ -238,7 +251,7 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
                         f"Give a short 2-sentence summary telling staff if the user sounds honest and detailed, or if they are giving standard fake unban excuses like 'it was my brother'."
                     )
                     completion = client.chat.completions.create(
-                        model="llama3-8b-8192", # Correct up-to-date fast production model name
+                        model="llama-3.1-8b-instant",  # PRODUCTION FAST MODEL ID
                         messages=[{"role": "user", "content": ai_prompt}],
                         temperature=0.4,
                         max_tokens=150
@@ -249,8 +262,12 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
             except Exception as e:
                 ai_assessment = f"⚠️ *AI triage processing error: {e}*"
 
-            ai_embed.description = f"*{ai_assessment}*"
-            await ai_msg.edit(embed=ai_embed)
+            # Route straight into hidden audit vault channel
+            log_channel = discord.utils.get(guild.text_channels, name="staff-audit-logs")
+            if log_channel:
+                ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Triage", description=f"**Target Appeal Room:** {channel.mention}\n\n**AI Analysis:**\n*{ai_assessment}*", color=discord.Color.blurple())
+                ai_embed.set_footer(text=f"Submitted by {interaction.user.name} | Confidential Staff View Only")
+                await log_channel.send(embed=ai_embed)
 
         asyncio.create_task(fetch_ai_assessment())
 
