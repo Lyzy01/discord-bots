@@ -4,20 +4,6 @@ from discord.ext import commands
 import asyncio
 import yt_dlp
 import os
-import ffdl
-
-# Automatically download a local headless copy of FFmpeg if it doesn't exist
-ff_dir = os.path.join(os.getcwd(), "ffmpeg_bin")
-if not os.path.exists(ff_dir):
-    print("📥 Downloading localized headless FFmpeg binary...")
-    ffdl.add_to_path(apps=["ffmpeg"], path=ff_dir)
-
-# Tell discord.py exactly where our downloaded audio binary lives
-FFMPEG_OPTIONS = {
-    'executable': os.path.join(ff_dir, "ffmpeg"),
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
-}
 
 # Optimize yt-dlp parameters for fast stream extraction
 YTDL_OPTIONS = {
@@ -34,7 +20,7 @@ YTDL_OPTIONS = {
     'source_address': '0.0.0.0'
 }
 
-# Optimize FFmpeg configuration for audio-only streams
+# Standard FFmpeg streaming flags
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn'
@@ -52,11 +38,9 @@ class MusicPlayerSource(discord.PCMVolumeTransformer):
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=True):
         loop = loop or asyncio.get_event_loop()
-        # Run extraction in an executor thread to prevent blocking the async loop
         data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
         
         if 'entries' in data:
-            # Grab the primary match if a search query was processed
             data = data['entries'][0]
 
         filename = data['url'] if stream else ytdl.prepare_filename(data)
@@ -72,7 +56,6 @@ class Music(commands.Cog):
     async def play(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer(ephemeral=False)
         
-        # Guard clause: Verify user is in a voice channel
         if not interaction.user.voice or not interaction.user.voice.channel:
             await interaction.followup.send("❌ You must connect to a valid voice channel before deploying the music engine.")
             return
@@ -80,17 +63,14 @@ class Music(commands.Cog):
         voice_channel = interaction.user.voice.channel
         voice_client = interaction.guild.voice_client
 
-        # Connect to channel or migrate if already active elsewhere
         if voice_client is None:
             voice_client = await voice_channel.connect()
         elif voice_client.channel != voice_channel:
             await voice_client.move_to(voice_channel)
 
         try:
-            # Extract and package target stream metadata
             player = await MusicPlayerSource.from_url(query, loop=self.bot.loop, stream=True)
             
-            # Stop existing playback if active
             if voice_client.is_playing():
                 voice_client.stop()
 
