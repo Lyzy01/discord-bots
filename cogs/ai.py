@@ -7,45 +7,68 @@ from groq import AsyncGroq
 class AI(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Crucial: Uses AsyncGroq so your whole bot doesn't lag/freeze while waiting for a response
         self.groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+        
+        # Dictionary storing conversation history per user
+        self.conversations = {}
 
-    @app_commands.command(name="ai", description="Ask the ultra-fast Groq AI a question!")
-    @app_commands.describe(prompt="What do you want to ask the AI?")
+    @app_commands.command(name="ai", description="Have a continuous, smart conversation with Ly's AI!")
+    @app_commands.describe(prompt="What do you want to say or ask?")
     async def ai_ask(self, interaction: discord.Interaction, prompt: str):
-        # Slash commands crash if they don't respond in 3 seconds, so we defer immediately
         await interaction.response.defer()
         
+        user_id = interaction.user.id
+
+        # 1. Initialize memory bank if it's a new conversation
+        if user_id not in self.conversations:
+            self.conversations[user_id] = [
+                {"role": "system", "content": "You are Ly's AI, a helpful, friendly, and witty AI assistant inside a Discord server. Keep your answers conversational and concise."}
+            ]
+
+        # 2. Add the user's newest message
+        self.conversations[user_id].append({"role": "user", "content": prompt})
+
+        # 3. Trim older history to keep things light (System prompt + last 10 messages)
+        if len(self.conversations[user_id]) > 11:
+            self.conversations[user_id] = [self.conversations[user_id][0]] + self.conversations[user_id][-10:]
+
         try:
-            # Querying Llama 3.3 via Groq API
+            # 4. Request completion from Groq
             completion = await self.groq_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": "You are a helpful, witty, and concise AI assistant inside a Discord server."},
-                    {"role": "user", "content": prompt}
-                ],
+                messages=self.conversations[user_id],
                 max_completion_tokens=400
             )
             ai_response = completion.choices[0].message.content
 
-            # Building a beautiful Embed for the response
-            embed = discord.Embed(title="🤖 Groq AI Core", color=discord.Color.blurple())
-            embed.add_field(name="❓ Your Prompt", value=f"*{prompt}*", inline=False)
+            # 5. Save the AI's response to memory
+            self.conversations[user_id].append({"role": "assistant", "content": ai_response})
+
+            # 6. Build the newly branded layout embed
+            embed = discord.Embed(title="✨ Ly's AI Core", color=discord.Color.brand_green())
+            embed.add_field(name="👤 You", value=prompt, inline=False)
             
-            # Safe truncation because Discord embed fields have a 1024 character limit
             if len(ai_response) > 1000:
-                embed.add_field(name="💡 Response", value=ai_response[:997] + "...", inline=False)
+                embed.add_field(name="🤖 Ly's AI", value=ai_response[:997] + "...", inline=False)
             else:
-                embed.add_field(name="💡 Response", value=ai_response, inline=False)
+                embed.add_field(name="🤖 Ly's AI", value=ai_response, inline=False)
             
-            embed.set_footer(text="Powered by Groq Inference Engine ⚡")
-            
-            # Sending the final answer back to the channel
+            # The requested attribution footer
+            embed.set_footer(text="This AI is powered by Groq ⚡")
             await interaction.followup.send(embed=embed)
             
         except Exception as e:
-            print(f"Groq Error: {e}")
-            await interaction.followup.send("❌ Sorry, something went wrong while trying to reach the AI engine.", ephemeral=True)
+            print(f"Groq Memory Error: {e}")
+            await interaction.followup.send("❌ Sorry, something went wrong while trying to process your request.", ephemeral=True)
+
+    @app_commands.command(name="ai_forget", description="Wipe Ly's AI memory of your conversation and start fresh!")
+    async def ai_forget(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        if user_id in self.conversations:
+            del self.conversations[user_id]
+            await interaction.response.send_message("🧠 *Memory wiped clean! Our next conversation will feel like meeting for the first time.*", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ I don't currently have any active conversation history saved for you!", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(AI(bot))
