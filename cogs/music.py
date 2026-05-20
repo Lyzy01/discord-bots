@@ -3,6 +3,21 @@ from discord import app_commands
 from discord.ext import commands
 import asyncio
 import yt_dlp
+import os
+import ffdl
+
+# Automatically download a local headless copy of FFmpeg if it doesn't exist
+ff_dir = os.path.join(os.getcwd(), "ffmpeg_bin")
+if not os.path.exists(ff_dir):
+    print("📥 Downloading localized headless FFmpeg binary...")
+    ffdl.add_to_path(apps=["ffmpeg"], path=ff_dir)
+
+# Tell discord.py exactly where our downloaded audio binary lives
+FFMPEG_OPTIONS = {
+    'executable': os.path.join(ff_dir, "ffmpeg"),
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn'
+}
 
 # Optimize yt-dlp parameters for fast stream extraction
 YTDL_OPTIONS = {
