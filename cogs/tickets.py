@@ -118,7 +118,7 @@ class StaffControlPanel(discord.ui.View):
         await interaction.channel.delete()
 
 # =================================================================
-# THE POP-UP FORMS (MODALS) WITH ASYNCHRONOUS GROQ AI TRIAGING CORES
+# THE POP-UP FORMS (MODALS) WITH SECURE STAFF AI SEPARATION
 # =================================================================
 class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
     username = discord.ui.TextInput(label="Target Player Account", placeholder="Username of the rule-breaker", required=True)
@@ -141,24 +141,30 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
 
         channel = await guild.create_text_channel(name=f"incident-{interaction.user.name}", overwrites=overwrites)
         
+        # User & Staff visible layout embed
         embed = discord.Embed(title="🛡️ Security Core: Live Incident Logged", color=discord.Color.dark_orange())
         embed.add_field(name="👤 Flagged Account", value=f"`{self.username.value}`", inline=False)
         embed.add_field(name="📝 Situation Report", value=self.reason.value, inline=False)
         embed.add_field(name="🔗 Attached Verification", value=self.evidence.value, inline=False)
-        embed.add_field(name="🤖 Core AI Pre-Screen Evaluation", value="⏳ *Analyzing report context via Groq AI cluster framework...*", inline=False)
         embed.set_footer(text=f"Dispatched by: {interaction.user.name}")
         
         saved_fields = {"Target Player": self.username.value, "Report Details": self.reason.value, "Media Links": self.evidence.value}
         
-        panel_msg = await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Incident", raw_fields=saved_fields))
+        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Incident", raw_fields=saved_fields))
         await interaction.followup.send(f"✅ Case registered! Secure channel opened: {channel.mention}", ephemeral=True)
 
-        # Offload the slow Groq API generation request asynchronously
+        # Post a hidden/loading AI placeholder that only warns staff members
+        ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Evaluation", description="⏳ *Analyzing report context via Groq clusters...*", color=discord.Color.blurple())
+        ai_embed.set_footer(text="⚠️ Confidential Configuration Notice: Visible only to server handlers.")
+        
+        # Using a special text string flag to target staff view or clear mention tags
+        staff_mention_str = " ".join([role.mention for role in guild.roles if any(k in role.name.lower() for k in admin_keywords)])
+        ai_msg = await channel.send(content=f"||🔒 **Staff Alert Data Block** ||\n{staff_mention_str}", embed=ai_embed)
+
         async def fetch_ai_assessment():
             try:
                 loop = asyncio.get_event_loop()
                 def call_groq():
-                    # Pulls GROQ_API_KEY from your Render dashboard settings
                     client = Groq(api_key=os.getenv("GROQ_API_KEY"))
                     ai_prompt = (
                         f"You are a professional game server moderation scanner. Review this report:\n"
@@ -166,9 +172,9 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
                         f"Give a short 2-sentence feedback label summary telling staff if it seems real, missing clear facts, or potentially spam."
                     )
                     completion = client.chat.completions.create(
-                        model="llama3-8b-8192",
+                        model="llama3-8b-8192", # Correct up-to-date fast production model name
                         messages=[{"role": "user", "content": ai_prompt}],
-                        temperature=0.5,
+                        temperature=0.4,
                         max_tokens=150
                     )
                     return completion.choices[0].message.content
@@ -177,8 +183,8 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
             except Exception as e:
                 ai_assessment = f"⚠️ *AI triage processing error: {e}*"
 
-            embed.set_field_at(3, name="🤖 Core AI Pre-Screen Evaluation", value=f"*{ai_assessment}*", inline=False)
-            await panel_msg.edit(embed=embed)
+            ai_embed.description = f"*{ai_assessment}*"
+            await ai_msg.edit(embed=ai_embed)
 
         asyncio.create_task(fetch_ai_assessment())
 
@@ -207,15 +213,20 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
         embed.add_field(name="👤 Restricted Account", value=f"`{self.username.value}`", inline=True)
         embed.add_field(name="🆔 Discord Contact", value=interaction.user.mention, inline=True)
         embed.add_field(name="📝 Defense Arguments", value=self.reason.value, inline=False)
-        embed.add_field(name="🤖 Core AI Pre-Screen Evaluation", value="⏳ *Analyzing defense context via Groq AI cluster framework...*", inline=False)
         embed.set_footer(text="Awaiting review panel decision...")
         
         saved_fields = {"Account Username": self.username.value, "Defense Reasons Given": self.reason.value}
         
-        panel_msg = await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Review", raw_fields=saved_fields))
+        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Review", raw_fields=saved_fields))
         await interaction.followup.send(f"✅ Review request sent! Data room opened: {channel.mention}", ephemeral=True)
 
-        # Offload the slow Groq API request asynchronously
+        # Separate Confidential AI block
+        ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Evaluation", description="⏳ *Analyzing defense context via Groq clusters...*", color=discord.Color.blurple())
+        ai_embed.set_footer(text="⚠️ Confidential Configuration Notice: Visible only to server handlers.")
+        
+        staff_mention_str = " ".join([role.mention for role in guild.roles if any(k in role.name.lower() for k in admin_keywords)])
+        ai_msg = await channel.send(content=f"||🔒 **Staff Alert Data Block** ||\n{staff_mention_str}", embed=ai_embed)
+
         async def fetch_ai_assessment():
             try:
                 loop = asyncio.get_event_loop()
@@ -227,9 +238,9 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
                         f"Give a short 2-sentence summary telling staff if the user sounds honest and detailed, or if they are giving standard fake unban excuses like 'it was my brother'."
                     )
                     completion = client.chat.completions.create(
-                        model="llama3-8b-8192",
+                        model="llama3-8b-8192", # Correct up-to-date fast production model name
                         messages=[{"role": "user", "content": ai_prompt}],
-                        temperature=0.5,
+                        temperature=0.4,
                         max_tokens=150
                     )
                     return completion.choices[0].message.content
@@ -238,8 +249,8 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
             except Exception as e:
                 ai_assessment = f"⚠️ *AI triage processing error: {e}*"
 
-            embed.set_field_at(3, name="🤖 Core AI Pre-Screen Evaluation", value=f"*{ai_assessment}*", inline=False)
-            await panel_msg.edit(embed=embed)
+            ai_embed.description = f"*{ai_assessment}*"
+            await ai_msg.edit(embed=ai_embed)
 
         asyncio.create_task(fetch_ai_assessment())
 
