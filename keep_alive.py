@@ -5,8 +5,8 @@ app = Flask('')
 
 # Dynamic global dictionary holding real-time bot information
 LIVE_STATS = {
-    "servers": 921,        # Set your actual number here so it's never 0
-    "users": "Active",   # Shows active instead of a blank 0
+    "servers": 921,     # Automatically calculated and updated via tickets.py
+    "users": "Active",   # Displays active counters rather than blank slots
     "processed": 326
 }
 
@@ -16,8 +16,22 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ly's AI Hub — Core Systems Panel</title>
+    <title>Ly's AI Hub — Core Operations Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-main: #0a0b10;
+            --bg-card: rgba(22, 28, 45, 0.4);
+            --bg-accent: rgba(10, 11, 16, 0.6);
+            --text-primary: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent-purple: #a855f7;
+            --accent-cyan: #38bdf8;
+            --accent-danger: #f43f5e;
+            --accent-success: #10b981;
+            --border-color: rgba(255, 255, 255, 0.05);
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -26,32 +40,35 @@ HTML_TEMPLATE = """
         }
 
         body {
-            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-            background-color: #0a0b10;
-            color: #f1f5f9;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-primary);
             overflow-x: hidden;
+            line-height: 1.6;
         }
 
+        /* Ambient Background Glow Effect */
         body::before {
             content: '';
-            position: absolute;
+            position: fixed;
             top: -10%;
             left: -10%;
-            width: 50%;
-            height: 50%;
-            background: radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, transparent 70%);
+            width: 60%;
+            height: 60%;
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.12) 0%, transparent 70%);
             z-index: -1;
             pointer-events: none;
         }
 
+        /* Keyframe Animations */
         @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(30px); }
+            from { opacity: 0; transform: translateY(25px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         @keyframes pulseNeon {
-            0%, 100% { border-color: rgba(168, 85, 247, 0.4); box-shadow: 0 0 15px rgba(168, 85, 247, 0.1); }
-            50% { border-color: rgba(56, 189, 248, 0.7); box-shadow: 0 0 25px rgba(56, 189, 248, 0.2); }
+            0%, 100% { border-color: rgba(168, 85, 247, 0.3); box-shadow: 0 0 15px rgba(168, 85, 247, 0.05); }
+            50% { border-color: rgba(56, 189, 248, 0.6); box-shadow: 0 0 25px rgba(56, 189, 248, 0.15); }
         }
 
         header {
@@ -63,9 +80,9 @@ HTML_TEMPLATE = """
 
         .logo-glow {
             font-size: 3.5rem;
-            font-weight: 900;
-            letter-spacing: -1px;
-            background: linear-gradient(135deg, #a855f7 0%, #38bdf8 100%);
+            font-weight: 800;
+            letter-spacing: -1.5px;
+            background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 15px;
@@ -73,105 +90,160 @@ HTML_TEMPLATE = """
         }
 
         header p {
-            color: #94a3b8;
-            font-size: 1.2rem;
-            max-width: 600px;
+            color: var(--text-muted);
+            font-size: 1.15rem;
+            max-width: 650px;
             margin: 0 auto;
-            line-height: 1.6;
         }
 
-        /* LIVE STATS METRICS ROW GRID */
+        /* Metrics Row Layout */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 20px;
-            max-width: 1000px;
-            margin: 20px auto 40px auto;
+            max-width: 1050px;
+            margin: -10px auto 40px auto;
             padding: 0 25px;
             animation: fadeInUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
         .stat-card {
             background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 22px;
             text-align: center;
             backdrop-filter: blur(10px);
+            transition: border-color 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: rgba(56, 189, 248, 0.2);
         }
 
         .stat-val {
-            font-size: 2rem;
-            font-weight: 800;
-            color: #38bdf8;
-            font-family: monospace;
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            font-family: 'JetBrains Mono', monospace;
         }
 
         .stat-lbl {
-            font-size: 0.85rem;
-            color: #94a3b8;
+            font-size: 0.8rem;
+            color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             margin-top: 5px;
         }
 
         .container {
-            max-width: 1000px;
+            max-width: 1050px;
             margin: 0 auto 80px auto;
             padding: 0 25px;
         }
 
+        /* Safety & Policy Banner */
+        .safety-banner {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(22, 28, 45, 0.3) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.15);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 35px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            animation: fadeInUp 0.9s ease-out;
+        }
+
+        .safety-icon {
+            font-size: 2.2rem;
+            color: var(--accent-success);
+            background: rgba(16, 185, 129, 0.08);
+            padding: 10px 15px;
+            border-radius: 12px;
+        }
+
+        .safety-text h3 {
+            color: var(--accent-success);
+            font-size: 1.15rem;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .safety-text p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* Split-Column Architecture Layout */
+        .split-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 30px;
+            margin-bottom: 35px;
+        }
+
+        @media (max-width: 900px) {
+            .split-grid { grid-template-columns: 1fr; }
+        }
+
         .section {
-            background: rgba(22, 28, 45, 0.4);
+            background: var(--bg-card);
             backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 35px;
-            margin-bottom: 35px;
-            animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s backwards;
+            animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
             transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease;
         }
 
         .section.ai-pulse {
-            animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) 0.1s backwards, pulseNeon 6s infinite;
+            animation: pulseNeon 6s infinite ease-in-out;
         }
 
         .section:hover {
             transform: translateY(-4px);
-            border-color: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.1);
         }
 
         h2 {
-            font-size: 1.6rem;
-            color: #38bdf8;
+            font-size: 1.5rem;
+            color: var(--accent-cyan);
             margin-bottom: 8px;
+            font-weight: 600;
         }
 
         .sec-desc {
-            color: #94a3b8;
+            color: var(--text-muted);
             margin-bottom: 25px;
+            font-size: 0.95rem;
         }
 
-        .command-item {
-            background: rgba(10, 11, 16, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.03);
+        /* Commands and Instruction Steps */
+        .command-item, .step-item {
+            background: var(--bg-accent);
+            border: 1px solid rgba(255, 255, 255, 0.02);
             padding: 20px;
-            border-radius: 10px;
+            border-radius: 12px;
             margin-bottom: 15px;
             transition: all 0.3s ease;
         }
 
+        .command-item:last-child, .step-item:last-child {
+            margin-bottom: 0;
+        }
+
         .command-item:hover {
-            background: rgba(15, 23, 42, 0.8);
-            border-left: 4px solid #a855f7;
+            background: rgba(15, 23, 42, 0.6);
+            border-left: 4px solid var(--accent-purple);
             transform: translateX(4px);
         }
 
         .command-name {
-            font-family: monospace;
+            font-family: 'JetBrains Mono', monospace;
             font-weight: 700;
-            color: #f43f5e;
-            font-size: 1.1rem;
+            color: var(--accent-danger);
+            font-size: 1.05rem;
         }
 
         .command-desc {
@@ -179,13 +251,96 @@ HTML_TEMPLATE = """
             font-size: 0.95rem;
             margin-top: 5px;
         }
+
+        /* Step Instruction Variations */
+        .step-item {
+            display: flex;
+            gap: 15px;
+        }
+
+        .step-num {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-purple);
+            background: rgba(168, 85, 247, 0.1);
+            font-weight: bold;
+            font-size: 0.85rem;
+            width: 26px;
+            height: 26px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .step-text h4 {
+            font-size: 1rem;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+
+        .step-text p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .code-tag {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(0, 0, 0, 0.4);
+            color: var(--accent-cyan);
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        /* Permissions Layout list */
+        .perm-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .perm-card {
+            background: var(--bg-accent);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .perm-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .perm-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .perm-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+
+        .badge-req { background: rgba(244, 63, 94, 0.1); color: var(--accent-danger); }
+        .badge-opt { background: rgba(56, 189, 248, 0.1); color: var(--accent-cyan); }
+
+        .perm-text {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
     </style>
 </head>
 <body>
 
     <header>
-        <div class="logo-glow">Ly's AI Terminal</div>
-        <p>The premium, custom interface manual. Outfitted with short-term user isolation engines and security routing clusters.</p>
+        <div class="logo-glow">Ly's AI Hub</div>
+        <p>Premium automation layout control center. Configured with structural context processing, multi-button panel views, and backend data routing clusters.</p>
     </header>
 
     <div class="stats-grid">
@@ -204,31 +359,110 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="container">
+
+        <div class="safety-banner">
+            <div class="safety-icon">🛡️</div>
+            <div class="safety-text">
+                <h3>Ethical Core System Integrity Policy</h3>
+                <p>This system framework serves exclusively as an administrative support suite. It contains absolute programmatic safety boundaries, completely avoiding arbitrary background executions, hostile mechanisms, or harmful modifications to server environments.</p>
+            </div>
+        </div>
+
+        <div class="split-grid">
+            
+            <div class="section">
+                <h2>📖 Complete Deployment & Operations Tutorial</h2>
+                <div class="sec-desc">Follow these configuration procedures to initialize core services safely across your server directories:</div>
+                
+                <div class="step-item">
+                    <div class="step-num">1</div>
+                    <div class="step-text">
+                        <h4>Environmental Initialization</h4>
+                        <p>Verify your environment parameters inside your Render hosting portal. Ensure your application securely loads your active Discord token variables and Groq API orchestration keys.</p>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">2</div>
+                    <div class="step-text">
+                        <h4>Construct Structural Logs Vault</h4>
+                        <p>Create a dedicated staff channel named exactly <span class="code-tag">#staff-audit-logs</span>. Configure permissions so only managers can read its history, ensuring your private AI analysis summaries remain confidential.</p>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">3</div>
+                    <div class="step-text">
+                        <h4>Deploy Interactive Interfaces</h4>
+                        <p>Execute the application setup commands in your target public rooms: use <span class="code-tag">/adduiplayerreport</span> for the reporting widget, or <span class="code-tag">/adduiappealban</span> for the restriction appeal terminal.</p>
+                    </div>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-num">4</div>
+                    <div class="step-text">
+                        <h4>Process Background Triage</h4>
+                        <p>When users open a case, a new room creates instantly. Your staff handles evaluation buttons safely while the background pre-screening AI delivers contextual assessments straight into your vault channel.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🔐 Channel Permission Requirements</h2>
+                <div class="sec-desc">Verify that Ly's system integrated application role card possesses these configuration values inside server settings:</div>
+                
+                <div class="perm-wrapper">
+                    <div class="perm-card">
+                        <div class="perm-header">
+                            <span class="perm-title">📁 Manage Channels</span>
+                            <span class="perm-badge badge-req">Required</span>
+                        </div>
+                        <p class="perm-text">Allows the system to automatically spin up and provision secure ticket rooms for ongoing case files.</p>
+                    </div>
+
+                    <div class="perm-card">
+                        <div class="perm-header">
+                            <span class="perm-title">💬 Send Messages</span>
+                            <span class="perm-badge badge-req">Required</span>
+                        </div>
+                        <p class="perm-text">Enables transmission of operational dialogue layouts and button control views into case dockets.</p>
+                    </div>
+
+                    <div class="perm-card">
+                        <div class="perm-header">
+                            <span class="perm-title">🔗 Embed Links</span>
+                            <span class="perm-badge badge-req">Required</span>
+                        </div>
+                        <p class="perm-text">Necessary for formatting clear, colored triage embeds and structured summary log receipts.</p>
+                    </div>
+
+                    <div class="perm-card">
+                        <div class="perm-header">
+                            <span class="perm-title">📬 Direct Messages</span>
+                            <span class="perm-badge badge-opt">Optional</span>
+                        </div>
+                        <p class="perm-text">Used to safely send notification statuses directly to users when case evaluations update.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
         <div class="section ai-pulse">
             <h2>🧠 Conversational Intelligence Vault</h2>
             <div class="sec-desc">Powered by an advanced dynamic dictionary storage cluster. Remembers past prompts sequentially per account identity.</div>
+            
             <div class="command-item">
                 <span class="command-name">/ai [prompt]</span>
                 <div class="command-desc">Transmits queries into Ly's specialized dialogue stack. Keeps context across multiple continuous replies.</div>
             </div>
+            
             <div class="command-item">
                 <span class="command-name">/ai_forget</span>
                 <div class="command-desc">Instantly cleanses your short-term dialogue storage bank, prompting a clean structural context reboot.</div>
             </div>
         </div>
 
-        <div class="section">
-            <h2>🛡️ Infrastructure Integrity Center</h2>
-            <div class="sec-desc">Secure data pipelines running straight to high staff entities or directly to core systems developers.</div>
-            <div class="command-item">
-                <span class="command-name">/adduiplayerreport [channel]</span>
-                <div class="command-desc">Deploys an automated incident report drop point. Spawns private, multi-button secure channels when users file infractions.</div>
-            </div>
-            <div class="command-item">
-                <span class="command-name">/adduiappealban [channel]</span>
-                <div class="command-desc">Drops the official account enforcement appeal terminal. Spawns secure evaluation corridors for restricted entities.</div>
-            </div>
-        </div>
     </div>
 
 </body>
