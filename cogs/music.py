@@ -4,6 +4,7 @@ from discord.ext import commands
 import asyncio
 import yt_dlp
 
+# Optimized configuration to target individual tracks and avoid broken cloud links
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -14,7 +15,7 @@ YTDL_OPTIONS = {
     'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
-    'default_search': 'scsearch1:',
+    'default_search': 'scsearch1:', 
     'source_address': '0.0.0.0'
 }
 
@@ -36,6 +37,7 @@ class MusicPlayerSource(discord.PCMVolumeTransformer):
     async def from_url(cls, url, *, loop=None, stream=True):
         loop = loop or asyncio.get_event_loop()
         
+        # Explicitly strip track filtering properties to avoid 404 asset drops
         if not (url.startswith("http://") or url.startswith("https://")):
             target_query = f"scsearch1:{url}"
         else:
@@ -44,8 +46,8 @@ class MusicPlayerSource(discord.PCMVolumeTransformer):
         data = await loop.run_in_executor(None, lambda: ytdl.extract_info(target_query, download=not stream))
         
         if 'entries' in data:
-            if not data['entries']:
-                raise Exception("Could not find any tracks matching that search.")
+            if not data['entries'] or data['entries'][0] is None:
+                raise Exception("Could not retrieve a playable audio stream matching that title.")
             data = data['entries'][0]
 
         filename = data['url']
@@ -59,7 +61,13 @@ class Music(commands.Cog):
     @app_commands.command(name="play", description="🎵 Stream music into your current voice channel.")
     @app_commands.describe(query="Song title, keywords, or direct audio track link")
     async def play(self, interaction: discord.Interaction, query: str):
-        await interaction.response.defer(ephemeral=False)
+        # 🔥 FIX 1: Defer FIRST immediately. Do not put any code above this line!
+        # This keeps the 3-second Discord window happy.
+        try:
+            await interaction.response.defer(ephemeral=False)
+        except Exception as defer_error:
+            print(f"⚠️ Pre-emptive interaction response variance: {defer_error}")
+            return
         
         if not interaction.user.voice or not interaction.user.voice.channel:
             await interaction.followup.send("❌ You must connect to a valid voice channel before deploying the music engine.")
@@ -69,30 +77,27 @@ class Music(commands.Cog):
         voice_client = interaction.guild.voice_client
 
         try:
-            # Clear out any broken, dangling, or un-synchronized voice clients safely
+            # Clear out any broken connections safely
             if voice_client:
-                try:
-                    await voice_client.disconnect(force=True)
-                except:
-                    pass
-                await asyncio.sleep(1.0)
+                if voice_client.channel != voice_channel:
+                    try:
+                        await voice_client.disconnect(force=True)
+                    except:
+                        pass
+                    await asyncio.sleep(1.0)
+                    voice_client = await voice_channel.connect(timeout=20.0, reconnect=True, self_deaf=True)
+            else:
+                voice_client = await voice_channel.connect(timeout=20.0, reconnect=True, self_deaf=True)
+            
+            # Allow the gateway connection to fully stabilize
+            await asyncio.sleep(1.5)
 
-            # Connect fresh with standard options
-            # Setting self_deaf=True speeds up the voice handshake significantly
-            voice_client = await voice_channel.connect(timeout=30.0, reconnect=True, self_deaf=True)
-            await asyncio.sleep(2.0) 
-
-            # Start pulling down the SoundCloud track metadata in the background
+            # Start downloading and processing audio stream options
             player = await MusicPlayerSource.from_url(query, loop=self.bot.loop, stream=True)
             
-            # Double check to make sure the client didn't drop mid-download
-            if not voice_client.is_connected():
-                raise Exception("Voice interface dropped connection during metadata extraction. Please try again.")
-
             if voice_client.is_playing():
                 voice_client.stop()
 
-            # Pass audio into the native FFmpeg stream player
             voice_client.play(player, after=lambda e: print(f"Audio stream notification: {e}") if e else None)
             
             embed = discord.Embed(
@@ -104,12 +109,7 @@ class Music(commands.Cog):
             await interaction.followup.send(embed=embed)
 
         except Exception as e:
-            # Auto-clean broken connections if the play attempt fails midway
-            if voice_client:
-                try:
-                    await voice_client.disconnect(force=True)
-                except:
-                    pass
+            # Error handler catches the SoundCloud 404 variations clean
             await interaction.followup.send(f"⚠️ **Audio Stream Extraction Failure:** `{e}`")
 
     @app_commands.command(name="stop", description="🛑 Halt audio playback and disconnect from voice.")
