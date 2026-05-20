@@ -17,13 +17,20 @@ status_rotation = itertools.cycle([
 async def on_ready():
     print(f"🤖 Connected successfully as: {bot.user.name}")
     
-    # Make sure background status rotation loops are armed
+    # Import the Button Views inside on_ready to prevent circular import loops
+    from cogs.tickets import ReportButtonView, AppealButtonView
+    
+    # Registers persistent listeners so old buttons stay active across restarts
+    bot.add_view(ReportButtonView())
+    bot.add_view(AppealButtonView())
+    print("🔘 Permanent Interface Buttons Armed Successfully!")
+    
     if not change_status.is_running():
         change_status.start()
         
     try:
         synced = await bot.tree.sync()
-        print(f"✅ Synced {len(synced)} slash commands globally!")
+        print(f"💪 Synced {len(synced)} slash commands globally!")
     except Exception as e:
         print(f"❌ Failed to sync commands: {e}")
 
