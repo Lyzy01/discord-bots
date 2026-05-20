@@ -7,57 +7,46 @@ from keep_alive import keep_alive
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Creating a cycle loop for changing statuses automatically
 status_rotation = itertools.cycle([
-    "💬 Type /ai to chat!",
-    "🌐 Monitoring active servers",
+    "Type /ai to chat!",
+    "📱 Monitoring active servers",
     "👀 Watching over the server"
 ])
-
 
 @bot.event
 async def on_ready():
     print(f"🤖 Connected successfully as: {bot.user.name}")
     
-    # Arm your two permanent channel panels across system restarts
-    from cogs.tickets import ReportButtonView, AppealButtonView
-    bot.add_view(ReportButtonView())
-    bot.add_view(AppealButtonView())
-    print("🔘 Persistent Interface Buttons Armed Successfully!")
-    
+    # Make sure background status rotation loops are armed
+    if not change_status.is_running():
+        change_status.start()
+        
     try:
         synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} slash commands globally!")
     except Exception as e:
         print(f"❌ Failed to sync commands: {e}")
 
-# This task runs background loops every 10 seconds to swap statuses dynamically
 @tasks.loop(seconds=10)
 async def change_status():
-    current_status = next(status_rotation)
-    # Customize the text dynamically depending on what's active
-    if "servers" in current_status:
-        text = f"🌐 in {len(bot.guilds)} servers!"
-    else:
-        text = current_status
-        
-    await bot.change_presence(activity=discord.Game(name=text))
+    await bot.change_presence(activity=discord.Game(next(status_rotation)))
 
 async def load_cogs():
-    # Adding 'tickets' directly into the live tracking array
-    for cog in ['general', 'moderation', 'fun', 'music', 'ai', 'admin', 'tickets']:
-        try:
-            await bot.load_extension(f'cogs.{cog}')
-            print(f"📁 Cog Loaded: {cog}")
-        except Exception as e:
-            print(f"❌ Failed to load cog [{cog}]: {e}")
+    # Automatically loop through and mount all files inside your cogs directory
+    for filename in os.listdir("./cogs"):
+        if filename.endswith(".py") and not filename.startswith("__"):
+            try:
+                await bot.load_extension(f"cogs.{filename[:-3]}")
+                print(f"📦 Successfully mounted cog module: {filename}")
+            except Exception as e:
+                print(f"❌ Failed loading cog module {filename}: {e}")
 
 async def main():
-    async with bot:
-        await load_cogs()
-        await bot.start(os.getenv("DISCORD_TOKEN"))
+    keep_alive()
+    await load_cogs()
+    # Pulls token environment safely from your Render environment variables dashboard
+    await bot.start(os.getenv("DISCORD_TOKEN"))
 
 if __name__ == "__main__":
-    keep_alive()
     import asyncio
     asyncio.run(main())
