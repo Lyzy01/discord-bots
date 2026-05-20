@@ -22,5 +22,18 @@ class General(commands.Cog):
         embed.add_field(name="Created On", value=guild.created_at.strftime("%B %d, %Y"), inline=False)
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="website", description="Get the link to Ly's AI official tutorial and command guide website!")
+    async def website_link(self, interaction: discord.Interaction):
+        # This link matches your exact Render app domain URL
+        site_url = "https://discord-bots-cny2.onrender.com"
+        
+        embed = discord.Embed(
+            title="🌐 Ly's AI Web Portal", 
+            description=f"Click the link below to access our full interactive user manual and command handbook!\n\n🔗 **[Open Official Tutorial Website]({site_url})**", 
+            color=discord.Color.brand_green()
+        )
+        embed.set_footer(text="Hosted live on Render secure clouds ⚡")
+        await interaction.response.send_message(embed=embed)
+
 async def setup(bot):
     await bot.add_cog(General(bot))
