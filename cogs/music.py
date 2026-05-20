@@ -4,7 +4,7 @@ from discord.ext import commands
 import asyncio
 import yt_dlp
 
-# Optimize yt-dlp parameters to route searches through SoundCloud to avoid YouTube IP blocks
+# Clean setup optimized for cloud deployments using SoundCloud fallback
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -15,7 +15,7 @@ YTDL_OPTIONS = {
     'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
-    'default_search': 'scsearch',  # 👈 Changed search provider from 'auto' to 'scsearch' (SoundCloud)
+    'default_search': 'scsearch1:',  # 👈 Restricts text inputs explicitly to a single SoundCloud result match
     'source_address': '0.0.0.0'
 }
 
@@ -30,28 +30,28 @@ class MusicPlayerSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5):
         super().__init__(source, volume)
         self.data = data
-        self.title = data.get('title')
-        # Handle variance between platforms gracefully
-        self.url = data.get('webpage_url') or data.get('url')
+        self.title = data.get('title', 'Unknown Title')
+        self.url = data.get('webpage_url') or data.get('url', '')
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=True):
         loop = loop or asyncio.get_event_loop()
         
-        # If the input is not a direct URL, explicitly tag it as a SoundCloud search
-        if not url.startswith("http://") and not url.startswith("https://"):
-            search_query = f"scsearch:{url}"
+        # If the user provides raw text keywords, format it explicitly as an scsearch query
+        if not (url.startswith("http://") or url.startswith("https://")):
+            target_query = f"scsearch1:{url}"
         else:
-            search_query = url
+            target_query = url
 
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search_query, download=not stream))
+        # Process metadata extraction using executor thread pool
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(target_query, download=not stream))
         
         if 'entries' in data:
             if not data['entries']:
-                raise Exception("No tracks discovered matching that query.")
+                raise Exception("Could not find any tracks matching that search.")
             data = data['entries'][0]
 
-        filename = data['url'] if stream else ytdl.prepare_filename(data)
+        filename = data['url']
         return cls(discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS), data=data)
 
 
@@ -59,8 +59,8 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="play", description="🎵 Stream music into your voice channel using searches or links.")
-    @app_commands.describe(query="Song title, keywords, or direct URL")
+    @app_commands.command(name="play", description="🎵 Stream music into your current voice channel.")
+    @app_commands.describe(query="Song title, keywords, or direct audio track link")
     async def play(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer(ephemeral=False)
         
@@ -82,10 +82,10 @@ class Music(commands.Cog):
             if voice_client.is_playing():
                 voice_client.stop()
 
-            voice_client.play(player, after=lambda e: print(f"Player error tracking alert: {e}") if e else None)
+            voice_client.play(player, after=lambda e: print(f"Audio stream notification: {e}") if e else None)
             
             embed = discord.Embed(
-                title="🎶 Now Streaming Audio",
+                title="🎶 Now Playing Audio",
                 description=f"[{player.title}]({player.url})",
                 color=discord.Color.brand_green()
             )
@@ -95,7 +95,7 @@ class Music(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"⚠️ **Audio Stream Extraction Failure:** `{e}`")
 
-    @app_commands.command(name="stop", description="🛑 Halt audio playback and disconnect the voice interface.")
+    @app_commands.command(name="stop", description="🛑 Halt audio playback and disconnect from voice.")
     async def stop(self, interaction: discord.Interaction):
         voice_client = interaction.guild.voice_client
         if voice_client and voice_client.is_connected():
