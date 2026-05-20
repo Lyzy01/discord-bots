@@ -42,7 +42,8 @@ async def change_status():
     await bot.change_presence(activity=discord.Game(name=text))
 
 async def load_cogs():
-    for cog in ['general', 'moderation', 'fun', 'music', 'ai', 'admin']:
+    # Adding 'tickets' directly into the live tracking array
+    for cog in ['general', 'moderation', 'fun', 'music', 'ai', 'admin', 'tickets']:
         try:
             await bot.load_extension(f'cogs.{cog}')
             print(f"📁 Cog Loaded: {cog}")
