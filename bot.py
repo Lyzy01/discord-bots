@@ -14,17 +14,16 @@ status_rotation = itertools.cycle([
     "👀 Watching over the server"
 ])
 
-@bot.event
-@bot.event
+
 @bot.event
 async def on_ready():
     print(f"🤖 Connected successfully as: {bot.user.name}")
     
-    # Keeps your main configuration boards responsive 24/7 across restarts
+    # Arm your two permanent channel panels across system restarts
     from cogs.tickets import ReportButtonView, AppealButtonView
     bot.add_view(ReportButtonView())
     bot.add_view(AppealButtonView())
-    print("🔘 Permanent Interface Buttons Armed Successfully!")
+    print("🔘 Persistent Interface Buttons Armed Successfully!")
     
     try:
         synced = await bot.tree.sync()
