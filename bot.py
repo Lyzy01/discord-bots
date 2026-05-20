@@ -3,6 +3,9 @@ from discord import app_commands
 from discord.ext import commands
 import io
 from datetime import datetime
+import os
+import aiohttp
+from aiohttp import web  # Added to feed Render's port checker
 
 # Initialize application intents configuration
 intents = discord.Intents.default()
@@ -198,22 +201,38 @@ async def transcript_command(interaction: discord.Interaction):
 # =========================================================================
 
 @bot.event
+# =========================================================================
+# ENGINE STARTUP SYNC SEQUENCE
+# =========================================================================
+
+async def handle_ping(request):
+    """Returns a status check to satisfy Render's port scanner."""
+    return web.Response(text="Bot Core Interface Operational.")
+
+@bot.event
 async def on_ready():
     print(f"Logged in successfully as: {bot.user} (ID: {bot.user.id})")
     try:
-        # Synchronizes application command tree vectors globally with Discord API
         synced_commands = await bot.tree.sync()
-        print(f"Global Command Trees mapped. Synced {len(synced_commands)} application endpoints safely.")
+        print(f"Global Command Trees mapped. Synced {len(synced_commands)} endpoints safely.")
+        
+        # Spin up a minimal background port binder for Render
+        app = web.Application()
+        app.router.add_get('/', handle_ping)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        
+        # Read the port Render assigns, defaulting to 8080
+        port = int(os.getenv("PORT", 8080))
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        print(f"⚓ Web port binding established on port {port} for free-tier hosting validation.")
+        
     except Exception as error:
         print(f"Encountered an internal setup sync conflict error: {error}")
 
-import os
-
-# ... rest of your code ...
-
-# Retrieve the secret token securely from the hosting platform's environment variables
+# Run utilizing your secret application token environment variable
 TOKEN = os.getenv("DISCORD_TOKEN")
-
 if TOKEN:
     bot.run(TOKEN)
 else:
