@@ -69,7 +69,6 @@ class StaffControlPanel(discord.ui.View):
         if not is_authorized_staff(interaction):
             return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
         
-        # Respond immediately so Discord never times out
         await interaction.response.send_message("⚙️ **Case Approved.** Deleting corridor...", ephemeral=True)
         processed_cases_counter += 1
         
@@ -124,7 +123,6 @@ class StaffControlPanel(discord.ui.View):
             return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
         
         await interaction.response.send_message("⚙️ **Session Cancelled.** Terminating corridor...", ephemeral=True)
-        
         await send_audit_archive(interaction.guild, f"{self.ticket_type} Wiped", self.target_user, self.raw_fields, "TERMINATED/CANCELLED", interaction.user)
         
         await asyncio.sleep(1)
@@ -192,7 +190,13 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
 
             log_channel = discord.utils.get(guild.text_channels, name="staff-audit-logs")
             if log_channel:
-                ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Triage", description=f"**Target Case Room:** {channel.mention}\n\n**AI Analysis:**\n*{ai_assessment}*", color=discord.Color.blurple())
+                # ADDED STAFF DISCLAIMER NOTICE HERE
+                description_text = (
+                    f"**Target Case Room:** {channel.mention}\n\n"
+                    f"**AI Analysis:**\n*{ai_assessment}*\n\n"
+                    f"⚠️ *Note: This Core AI Pre-Screen Triage is not always accurate, so please review the case carefully.*"
+                )
+                ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Triage", description=description_text, color=discord.Color.blurple())
                 ai_embed.set_footer(text=f"Submitted by {interaction.user.name} | Confidential Staff View Only")
                 await log_channel.send(embed=ai_embed)
 
@@ -254,7 +258,13 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
 
             log_channel = discord.utils.get(guild.text_channels, name="staff-audit-logs")
             if log_channel:
-                ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Triage", description=f"**Target Appeal Room:** {channel.mention}\n\n**AI Analysis:**\n*{ai_assessment}*", color=discord.Color.blurple())
+                # ADDED STAFF DISCLAIMER NOTICE HERE
+                description_text = (
+                    f"**Target Appeal Room:** {channel.mention}\n\n"
+                    f"**AI Analysis:**\n*{ai_assessment}*\n\n"
+                    f"⚠️ *Note: This Core AI Pre-Screen Triage is not always accurate, so please review the case carefully.*"
+                )
+                ai_embed = discord.Embed(title="🤖 Core AI Pre-Screen Triage", description=description_text, color=discord.Color.blurple())
                 ai_embed.set_footer(text=f"Submitted by {interaction.user.name} | Confidential Staff View Only")
                 await log_channel.send(embed=ai_embed)
 
