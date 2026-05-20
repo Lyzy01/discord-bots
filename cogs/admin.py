@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-# Replace this string with your exact Discord personal account Username
+# Keep this as your exact username
 OWNER_USERNAME = "kimmendez01"
 
 class Admin(commands.Cog):
@@ -10,44 +10,61 @@ class Admin(commands.Cog):
         self.bot = bot
 
     # -------------------------------------------------------------
-    # DM Gatekeeper Event Listener
+    # Upgraded DM Gatekeeper + ModMail Router
     # -------------------------------------------------------------
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Ignore messages sent by the bot itself to prevent infinite loops
         if message.author.id == self.bot.user.id:
             return
 
-        # Check if the message is happening inside a DM channel
         if isinstance(message.channel, discord.DMChannel):
-            # If the sender is you (kimmendez01), let it pass completely!
+            # If it's you messaging the bot, ignore the restriction filter
             if message.author.name == OWNER_USERNAME:
                 return
             
-            # If anyone else tries to DM the bot, block them and send the warning
+            # 1. Alert the regular user that DMs are locked down
             try:
-                await message.channel.send("❌ Oops, you need higher permission to dm me!")
+                await message.channel.send("❌ Oops, you need higher permission to dm me! Your message has been forwarded to my developer.")
             except discord.Forbidden:
-                # In case their DMs are completely locked down
                 pass
+
+            # 2. Forward their ticket message straight to kimmendez01
+            try:
+                # Search Discord's internal cache to find your user object global account
+                owner = discord.utils.get(self.bot.users, name=OWNER_USERNAME)
+                
+                if owner:
+                    # Construct a crisp dashboard ticket box layout
+                    embed = discord.Embed(
+                        title="📩 New Incoming Support Ticket",
+                        description=message.content if message.content else "*[No Text Provided]*",
+                        color=discord.Color.orange()
+                    )
+                    embed.set_author(name=f"{message.author.display_name} (@{message.author.name})", icon_url=message.author.avatar.url if message.author.avatar else None)
+                    embed.set_footer(text=f"User ID: {message.author.id} • Forwarded Automatically")
+                    
+                    # Handle any file/image attachments they might have uploaded in the DM
+                    if message.attachments:
+                        embed.add_field(name="Attachments", value=f"📎 Sent {len(message.attachments)} file(s)", inline=False)
+                    
+                    await owner.send(embed=embed)
+            except Exception as e:
+                print(f"Failed to route ticket message to owner DMs: {e}")
 
     # -------------------------------------------------------------
     # Administrative Command: /viewservers
     # -------------------------------------------------------------
     @app_commands.command(name="viewservers", description="[Admin Only] View all servers this bot is active in")
     async def view_servers(self, interaction: discord.Interaction):
-        # Security Check: Reject if anyone other than kimmendez01 runs it
         if interaction.user.name != OWNER_USERNAME:
             return await interaction.response.send_message("❌ This administrative tool is restricted.", ephemeral=True)
         
         await interaction.response.defer(ephemeral=True)
         
         guild_list = []
-        # Loop through all servers the bot is connected to
         for guild in self.bot.guilds:
             guild_list.append(f"• **{guild.name}** *(Members: {guild.member_count} | ID: {guild.id})*")
         
-        # Format the list output beautifully
         server_output = "\n".join(guild_list) if guild_list else "Not currently deployed in any servers."
         
         embed = discord.Embed(
@@ -64,17 +81,14 @@ class Admin(commands.Cog):
     @app_commands.command(name="gbannounce", description="[Admin Only] Broadcast a global announcement to all servers")
     @app_commands.describe(message="The announcement text to blast globally")
     async def global_announce(self, interaction: discord.Interaction, message: str):
-        # Security Check: Reject if anyone other than kimmendez01 runs it
         if interaction.user.name != OWNER_USERNAME:
             return await interaction.response.send_message("❌ This administrative tool is restricted.", ephemeral=True)
         
-        # Defer immediately since broadcasting to many servers can take several seconds
         await interaction.response.defer(ephemeral=True)
         
         success_count = 0
         failed_count = 0
 
-        # Build a beautiful, official announcement embed
         embed = discord.Embed(
             title="📢 Global Broadcast Notification",
             description=message,
@@ -82,13 +96,10 @@ class Admin(commands.Cog):
         )
         embed.set_footer(text=f"Sent by Bot Administration • {interaction.user.display_name}")
 
-        # Send this message to the system/default text channel of EVERY server
         for guild in self.bot.guilds:
-            # Look for the best channel to send to (system channel, rules channel, or first text channel)
             target_channel = guild.system_channel or guild.rules_channel
             
             if not target_channel:
-                # If no system channel is set, pick the first available text channel it can write in
                 for channel in guild.text_channels:
                     if channel.permissions_for(guild.me).send_messages:
                         target_channel = channel
