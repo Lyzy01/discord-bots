@@ -1,50 +1,96 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+import asyncio
 
 OWNER_USERNAME = "kimmendez01"
 
-# =================================================================
-# 1. THE CANCEL / CLOSE TICKET BUTTON
-# =================================================================
-class CloseTicketView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None) # Keeps button active permanently
+# Helper function to check if the interacting user is an eligible administrator/staff member
+def is_authorized_staff(interaction: discord.Interaction) -> bool:
+    if interaction.user.name == OWNER_USERNAME:
+        return True
+    admin_keywords = ["admin", "moderator", "staff", "owner"]
+    return any(any(k in role.name.lower() for k in admin_keywords) for role in interaction.user.roles)
 
-    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.secondary, custom_id="close_ticket_button")
-    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Admin/Staff security check
-        admin_keywords = ["admin", "moderator", "staff", "owner"]
-        is_staff = any(any(k in role.name.lower() for k in admin_keywords) for role in interaction.user.roles)
+# =================================================================
+# 1. THE STAFF EVALUATION CONTROL PANEL (BUTTONS PANEL)
+# =================================================================
+class StaffControlPanel(discord.ui.View):
+    def __init__(self, target_user: discord.User, ticket_type: str):
+        super().__init__(timeout=None)
+        self.target_user = target_user
+        self.ticket_type = ticket_type # "Incident" or "Review"
+
+    @discord.ui.button(label="✅ Approve Case", style=discord.ButtonStyle.success, custom_id="panel_approve_case")
+    async def approve_case(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_authorized_staff(interaction):
+            return await interaction.response.send_message("❌ Access Denied. Only high-ranking operators can evaluate this case.", ephemeral=True)
         
-        # Allow the button to work if it's the owner or any staff member
-        if interaction.user.name == OWNER_USERNAME or is_staff:
-            await interaction.response.send_message("⚙️ *Closing ticket and deleting this temporary channel in 5 seconds...*")
-            import asyncio
-            await asyncio.sleep(5)
-            await interaction.channel.delete()
+        await interaction.response.send_message("⚙️ *Processing approval authorization...*")
+        
+        # Determine specific DM text layout based on the file category
+        if self.ticket_type == "Incident":
+            msg_content = "🛡️ **Ly's Security Operations Notice:** Your recently filed incident report has been thoroughly investigated and **APPROVED** by our team. Action has been taken against the target offender. Thank you for helping keep our community clean!"
         else:
-            await interaction.response.send_message("❌ Only administrators or moderators can close this ticket room.", ephemeral=True)
+            msg_content = "⚖️ **Ly's Review Desk Notice:** Excellent news! Your enforcement appeal has been formally **APPROVED** upon review. Your account status and access permissions are being restored immediately."
+
+        # Attempt to DM the user
+        try:
+            await self.target_user.send(msg_content)
+        except discord.Forbidden:
+            print(f"Could not DM user {self.target_user.id} - DMs locked down.")
+
+        await asyncio.sleep(2)
+        await interaction.channel.delete()
+
+    @discord.ui.button(label="❌ Deny Case", style=discord.ButtonStyle.danger, custom_id="panel_deny_case")
+    async def deny_case(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_authorized_staff(interaction):
+            return await interaction.response.send_message("❌ Access Denied. Only high-ranking operators can evaluate this case.", ephemeral=True)
+        
+        await interaction.response.send_message("⚙️ *Processing denial authorization...*")
+        
+        if self.ticket_type == "Incident":
+            msg_content = "🛡️ **Ly's Security Operations Notice:** Your incident report submission has been reviewed and **DENIED**. The provided context or verification data was deemed insufficient to authorize disciplinary actions."
+        else:
+            msg_content = "⚖️ **Ly's Review Desk Notice:** Your enforcement appeal has been reviewed and **DENIED**. The restriction penalty against your account remains absolute as per our core server bylaws."
+
+        try:
+            await self.target_user.send(msg_content)
+        except discord.Forbidden:
+            print(f"Could not DM user {self.target_user.id} - DMs locked down.")
+
+        await asyncio.sleep(2)
+        await interaction.channel.delete()
+
+    @discord.ui.button(label="🔒 Cancel Session", style=discord.ButtonStyle.secondary, custom_id="panel_cancel_session")
+    async def cancel_session(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_authorized_staff(interaction):
+            return await interaction.response.send_message("❌ Access Denied. Only high-ranking operators can terminate this corridor.", ephemeral=True)
+        
+        await interaction.response.send_message("⚙️ *Session termination authorized. Deleting data corridor instantly...*")
+        await asyncio.sleep(3)
+        await interaction.channel.delete()
 
 # =================================================================
 # 2. THE POP-UP FORMS (MODALS)
 # =================================================================
-class PlayerReportModal(discord.ui.Modal, title="Player Report"):
+class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
     username = discord.ui.TextInput(
-        label="Username", 
-        placeholder="Username of the user you are reporting", 
+        label="Target Player Account", 
+        placeholder="Exact username of the rule-breaker", 
         required=True
     )
     reason = discord.ui.TextInput(
-        label="Why are you reporting this user?", 
+        label="Incident Context & Details", 
         style=discord.TextStyle.paragraph,
-        placeholder="Please try and provide context - don't just say 'Exploiting'", 
+        placeholder="Explain exactly what happened (e.g., glitching, bad behavior). Avoid vague answers.", 
         required=True
     )
     evidence = discord.ui.TextInput(
-        label="Evidence", 
+        label="Proof / Media Evidence Link", 
         style=discord.TextStyle.paragraph,
-        placeholder="Video evidence of the user breaking the rules", 
+        placeholder="Paste links to your video or screenshot clips here", 
         required=True
     )
 
@@ -52,7 +98,6 @@ class PlayerReportModal(discord.ui.Modal, title="Player Report"):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         
-        # Dynamic Permission System: Hide room from standard users
         admin_keywords = ["admin", "moderator", "staff", "owner"]
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -60,35 +105,33 @@ class PlayerReportModal(discord.ui.Modal, title="Player Report"):
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
         
-        # Grant automatic access to any Admin/Mod roles
         for role in guild.roles:
             if any(k in role.name.lower() for k in admin_keywords):
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        # Create the temporary room
-        channel = await guild.create_text_channel(name=f"report-{interaction.user.name}", overwrites=overwrites)
+        channel = await guild.create_text_channel(name=f"incident-{interaction.user.name}", overwrites=overwrites)
         
-        embed = discord.Embed(title="🚨 New In-Game Player Report Submitted", color=discord.Color.dark_red())
-        embed.add_field(name="👤 Target Offender", value=self.username.value, inline=False)
-        embed.add_field(name="📝 Violation Context", value=self.reason.value, inline=False)
-        embed.add_field(name="🎬 Provided Evidence Link/Data", value=self.evidence.value, inline=False)
-        embed.set_footer(text=f"Filed by: {interaction.user.name} ({interaction.user.id})")
+        embed = discord.Embed(title="🛡️ Security Core: Live Incident Logged", color=discord.Color.dark_orange())
+        embed.add_field(name="👤 Flagged Account", value=f"`{self.username.value}`", inline=False)
+        embed.add_field(name="📝 Situation Report", value=self.reason.value, inline=False)
+        embed.add_field(name="🔗 Attached Verification", value=self.evidence.value, inline=False)
+        embed.set_footer(text=f"Dispatched by: {interaction.user.name} • Evaluation Panel Ready Below")
         
-        # Send details alongside the administrative closing button view
-        await channel.send(embed=embed, view=CloseTicketView())
-        await interaction.followup.send(f"✅ Report logged! Private room spawned: {channel.mention}", ephemeral=True)
+        # Drop the panel inside the corridor and link it to the user who reported
+        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Incident"))
+        await interaction.followup.send(f"✅ Case registered successfully! Secure channel opened: {channel.mention}", ephemeral=True)
 
 
-class BanAppealModal(discord.ui.Modal, title="Ban Appeal"):
+class BanAppealModal(discord.ui.Modal, title="Review Request System"):
     username = discord.ui.TextInput(
-        label="Your Roblox Username", 
-        placeholder="Username of the account you are appealing for", 
+        label="Your In-Game Username", 
+        placeholder="The account name that was restricted", 
         required=True
     )
     reason = discord.ui.TextInput(
-        label="Appeal Reason", 
+        label="Case Argument / Defense Statement", 
         style=discord.TextStyle.paragraph,
-        placeholder="Why do you believe you were banned incorrectly?", 
+        placeholder="Explain carefully why this restriction should be lifted or modified.", 
         required=True
     )
 
@@ -106,27 +149,26 @@ class BanAppealModal(discord.ui.Modal, title="Ban Appeal"):
             if any(k in role.name.lower() for k in admin_keywords):
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        # Create the temporary room
-        channel = await guild.create_text_channel(name=f"appeal-{interaction.user.name}", overwrites=overwrites)
+        channel = await guild.create_text_channel(name=f"review-{interaction.user.name}", overwrites=overwrites)
         
-        embed = discord.Embed(title="⚖️ Roblox Restriction Appeal Filed", color=discord.Color.blue())
-        embed.add_field(name="👤 Roblox Username", value=self.username.value, inline=True)
-        embed.add_field(name="🆔 Discord Target", value=interaction.user.mention, inline=True)
-        embed.add_field(name="📝 Case Argument Details", value=self.reason.value, inline=False)
-        embed.set_footer(text="Awaiting High-Tier Admin Evaluation Panel...")
+        embed = discord.Embed(title="⚖️ Enforcement Review Docket Initiated", color=discord.Color.teal())
+        embed.add_field(name="👤 Restricted Account", value=f"`{self.username.value}`", inline=True)
+        embed.add_field(name="🆔 Discord Contact", value=interaction.user.mention, inline=True)
+        embed.add_field(name="📝 Defense Arguments", value=self.reason.value, inline=False)
+        embed.set_footer(text="Awaiting review panel decision...")
         
-        # Send details alongside the administrative closing button view
-        await channel.send(embed=embed, view=CloseTicketView())
-        await interaction.followup.send(f"✅ Appeal logged! Private room spawned: {channel.mention}", ephemeral=True)
+        # Drop the panel inside the corridor and link it to the user who appealed
+        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Review"))
+        await interaction.followup.send(f"✅ Review request sent! Data room opened: {channel.mention}", ephemeral=True)
 
 # =================================================================
-# 3. THE SETUP BASE BOARDS
+# 3. THE MAIN INTERACTIVE DASHBOARD BOARDS
 # =================================================================
 class ReportButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Report User", style=discord.ButtonStyle.danger, custom_id="trigger_player_report")
+    @discord.ui.button(label="File Incident Report 🚩", style=discord.ButtonStyle.danger, custom_id="trigger_player_report")
     async def click_report(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(PlayerReportModal())
 
@@ -134,7 +176,7 @@ class AppealButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Appeal Ban", style=discord.ButtonStyle.danger, custom_id="trigger_ban_appeal")
+    @discord.ui.button(label="Request Case Review 📑", style=discord.ButtonStyle.primary, custom_id="trigger_ban_appeal")
     async def click_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(BanAppealModal())
 
@@ -143,8 +185,8 @@ class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="adduiplayerreport", description="Deploy the player report interface to a chosen channel")
-    @app_commands.describe(channel="The channel where the embed board should be placed")
+    @app_commands.command(name="adduiplayerreport", description="Deploy the custom incident reporting layout center")
+    @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_report(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if interaction.user.name != OWNER_USERNAME:
             return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
@@ -152,22 +194,23 @@ class Tickets(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         embed = discord.Embed(
-            title="🎮 Submit In-Game Reports",
+            title="🛡️ Integrity Operations Center",
             description=(
-                "If you spotted a player breaking community guidelines or exploiting inside the game, click the button below to alert our staff team.\n\n"
-                "**Requirements:**\n"
-                "• Target account name must be provided accurately.\n"
-                "• Legitimate video/screenshot links must be included for fast actions."
+                "See someone breaking our core guidelines or using illegal exploits? Help keep our game safe.\n\n"
+                "**Submission Guidelines:**\n"
+                "• Provide the exact target profile name.\n"
+                "• Include direct media links (clips/screencaps) showing the violation.\n\n"
+                "Click the dispatch button below to securely brief our staff agents."
             ),
-            color=discord.Color.red()
+            color=discord.Color.dark_red()
         )
-        embed.set_footer(text="Ly's Automated Moderation Core")
+        embed.set_footer(text="Ly's Automated Moderation Core • Secure Line")
         
         await channel.send(embed=embed, view=ReportButtonView())
-        await interaction.followup.send(f"✅ Interface dropped safely inside {channel.mention}!", ephemeral=True)
+        await interaction.followup.send(f"✅ Security interface deployed in {channel.mention}!", ephemeral=True)
 
-    @app_commands.command(name="adduiappealban", description="Deploy the ban appeal interface to a chosen channel")
-    @app_commands.describe(channel="The channel where the embed board should be placed")
+    @app_commands.command(name="adduiappealban", description="Deploy the custom account restriction appeal desk")
+    @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_appeal(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if interaction.user.name != OWNER_USERNAME:
             return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
@@ -175,23 +218,24 @@ class Tickets(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         embed = discord.Embed(
-            title="Appeal Your Ban",
+            title="⚖️ Enforcement Appeal Operations",
             description=(
-                "If you believe you were banned **unfairly**, you can appeal your ban by clicking the button below.\n\n"
-                "**You MUST include the following details in your appeal or it will be dismissed:**\n"
-                "• Your Roblox username\n"
-                "• Why you believe you were banned unfairly\n"
-                "• Any evidence you have to support your claim\n\n"
-                "**NOTE:**\n"
-                "• Exploiting is a **PERMANENT** ban. We do not offer second chances to anyone if they are banned for exploiting.\n"
-                "• If you were banned more than **30 days ago**, your appeal will be denied. This rule has absolutely **NO EXCEPTIONS**.\n\n"
-                "Appeals take time to process, so please refrain from pinging staff members or submitting multiple appeals."
+                "If an administrative action was taken against your account and you believe it was done in error, you may present your arguments below.\n\n"
+                "**Review Protocols (Must Follow):**\n"
+                "• State your accurate in-game username.\n"
+                "• Detail exactly why the restriction should be reversed or mitigated.\n"
+                "• Supply any critical context or validation material to aid your case.\n\n"
+                "**CRITICAL SECURITY RULES:**\n"
+                "• Exploiting infractions are designated as **NON-NEGOTIABLE** and will not receive second-chance overrides.\n"
+                "• Restrictions older than **30 days** are archived and permanently locked from future evaluations.\n\n"
+                "*Every submission creates a private corridor directly with high staff. Please do not ping personnel after opening.*"
             ),
-            color=discord.Color.from_rgb(43, 45, 49)
+            color=discord.Color.from_rgb(32, 34, 37)
         )
+        embed.set_footer(text="Ly's Automated Review Systems • Legal Core")
         
         await channel.send(embed=embed, view=AppealButtonView())
-        await interaction.followup.send(f"✅ Interface dropped safely inside {channel.mention}!", ephemeral=True)
+        await interaction.followup.send(f"✅ Appeal interface deployed in {channel.mention}!", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Tickets(bot))
