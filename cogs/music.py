@@ -59,6 +59,7 @@ class Music(commands.Cog):
     @app_commands.command(name="play", description="🎵 Stream music into your current voice channel.")
     @app_commands.describe(query="Song title, keywords, or direct audio track link")
     async def play(self, interaction: discord.Interaction, query: str):
+        # We use a long defer time since cloud servers need an extra moment to handle voice handshakes
         await interaction.response.defer(ephemeral=False)
         
         if not interaction.user.voice or not interaction.user.voice.channel:
@@ -68,23 +69,35 @@ class Music(commands.Cog):
         voice_channel = interaction.user.voice.channel
         voice_client = interaction.guild.voice_client
 
-        # Connect or move, then pause for safety stability
-        if voice_client is None:
-            voice_client = await voice_channel.connect()
-            await asyncio.sleep(1.5)  # 👈 Crucial pause giving Discord time to register the bot's presence
-        elif voice_client.channel != voice_channel:
-            await voice_client.move_to(voice_channel)
-            await asyncio.sleep(1.5)
-
         try:
+            # If the bot is stuck in a weird half-connected state, clear it out completely first
+            if voice_client and not voice_client.is_connected():
+                try:
+                    await voice_client.disconnect(force=True)
+                except:
+                    pass
+                voice_client = None
+
+            # Connect fresh or move smoothly
+            if voice_client is None:
+                voice_client = await voice_channel.connect(timeout=20.0, reconnect=True)
+                await asyncio.sleep(2.0)  # Give Discord plenty of time to set up the region routing
+            elif voice_client.channel != voice_channel:
+                await voice_client.move_to(voice_channel)
+                await asyncio.sleep(2.0)
+
+            # Start fetching the audio track information
             player = await MusicPlayerSource.from_url(query, loop=self.bot.loop, stream=True)
             
+            # Stop any overlapping audio tracks if something is already playing
             if voice_client.is_playing():
                 voice_client.stop()
 
-            # Extra connection state verification check before attempting stream playback
+            # Final check to make sure the gateway connection didn't drop during extraction
             if not voice_client.is_connected():
-                raise Exception("Voice interface handshake timed out. Please try running the command once more.")
+                await voice_client.disconnect(force=True)
+                voice_client = await voice_channel.connect(timeout=20.0, reconnect=True)
+                await asyncio.sleep(2.0)
 
             voice_client.play(player, after=lambda e: print(f"Audio stream notification: {e}") if e else None)
             
