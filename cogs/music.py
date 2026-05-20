@@ -4,7 +4,6 @@ from discord.ext import commands
 import asyncio
 import yt_dlp
 
-# Clean setup optimized for cloud deployments using SoundCloud fallback
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -15,7 +14,7 @@ YTDL_OPTIONS = {
     'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
-    'default_search': 'scsearch1:',  # 👈 Restricts text inputs explicitly to a single SoundCloud result match
+    'default_search': 'scsearch1:',
     'source_address': '0.0.0.0'
 }
 
@@ -37,13 +36,11 @@ class MusicPlayerSource(discord.PCMVolumeTransformer):
     async def from_url(cls, url, *, loop=None, stream=True):
         loop = loop or asyncio.get_event_loop()
         
-        # If the user provides raw text keywords, format it explicitly as an scsearch query
         if not (url.startswith("http://") or url.startswith("https://")):
             target_query = f"scsearch1:{url}"
         else:
             target_query = url
 
-        # Process metadata extraction using executor thread pool
         data = await loop.run_in_executor(None, lambda: ytdl.extract_info(target_query, download=not stream))
         
         if 'entries' in data:
@@ -71,16 +68,23 @@ class Music(commands.Cog):
         voice_channel = interaction.user.voice.channel
         voice_client = interaction.guild.voice_client
 
+        # Connect or move, then pause for safety stability
         if voice_client is None:
             voice_client = await voice_channel.connect()
+            await asyncio.sleep(1.5)  # 👈 Crucial pause giving Discord time to register the bot's presence
         elif voice_client.channel != voice_channel:
             await voice_client.move_to(voice_channel)
+            await asyncio.sleep(1.5)
 
         try:
             player = await MusicPlayerSource.from_url(query, loop=self.bot.loop, stream=True)
             
             if voice_client.is_playing():
                 voice_client.stop()
+
+            # Extra connection state verification check before attempting stream playback
+            if not voice_client.is_connected():
+                raise Exception("Voice interface handshake timed out. Please try running the command once more.")
 
             voice_client.play(player, after=lambda e: print(f"Audio stream notification: {e}") if e else None)
             
