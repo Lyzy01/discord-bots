@@ -22,8 +22,8 @@ async def on_ready():
     print("📂 Scanning and mounting cog extensions...")
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py") and not filename.startswith("__"):
-            # Check if it's already loaded to prevent duplicate load errors on reconnects
             cog_name = f"cogs.{filename[:-3]}"
+            # Prevent duplicate load errors on reconnects
             if cog_name not in bot.extensions:
                 try:
                     await bot.load_extension(cog_name)
@@ -42,6 +42,22 @@ async def on_ready():
         print(f"✅ Synced {len(synced)} slash commands globally!")
     except Exception as e:
         print(f"❌ Failed to sync commands: {e}")
+
+# Manual prefix command to force sync if Discord client cache freezes
+@bot.command(name="sync")
+async def manual_sync(ctx):
+    # Only allow the bot owner or staff to sync manually
+    admin_keywords = ["admin", "moderator", "staff", "owner"]
+    is_staff = any(any(k in role.name.lower() for k in admin_keywords) for role in ctx.author.roles) or ctx.author.name == "kimmendez01"
+    
+    if not is_staff:
+        return await ctx.send("❌ Access Denied.")
+        
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"✅ Manually forced synchronization of {len(synced)} slash commands!")
+    except Exception as e:
+        await ctx.send(f"❌ Force sync failed: {e}")
 
 @tasks.loop(seconds=10)
 async def change_status():
