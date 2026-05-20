@@ -1,11 +1,16 @@
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 import asyncio
+import google.generativeai as genai
+import os
+import keep_alive
 
 OWNER_USERNAME = "kimmendez01"
 
-# Helper function to check if the interacting user is an eligible administrator/staff member
+# Counter to log processed files globally across memory resets
+processed_cases_counter = 0
+
 def is_authorized_staff(interaction: discord.Interaction) -> bool:
     if interaction.user.name == OWNER_USERNAME:
         return True
@@ -13,52 +18,95 @@ def is_authorized_staff(interaction: discord.Interaction) -> bool:
     return any(any(k in role.name.lower() for k in admin_keywords) for role in interaction.user.roles)
 
 # =================================================================
-# 1. THE STAFF EVALUATION CONTROL PANEL (BUTTONS PANEL)
+# ADVANCED AUDIT LOG ARCHIVER FUNCTION
+# =================================================================
+async def send_audit_archive(guild: discord.Guild, title: str, user: discord.User, fields: dict, decision: str, staff: discord.User):
+    """Locates or builds a permanent logging audit text channel and records a receipt."""
+    # Look for a secure logging corridor channel
+    log_channel = discord.utils.get(guild.text_channels, name="staff-audit-logs")
+    
+    if not log_channel:
+        try:
+            # Safe creation hidden away from standard viewers
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            }
+            log_channel = await guild.create_text_channel(name="staff-audit-logs", overwrites=overwrites)
+            await log_channel.send("📁 **System Registry: Audit Logs Corridor Initialized Securely.**")
+        except Exception as e:
+            print(f"Failed to auto-spawn log vault channel: {e}")
+            return
+
+    # Determine signature colors
+    color = discord.Color.green() if decision == "APPROVED" else (discord.Color.red() if decision == "DENIED" else discord.Color.greyple())
+
+    audit_embed = discord.Embed(title=f"📋 Archive Record: {title}", color=color)
+    audit_embed.add_field(name="👤 Original Submitter", value=f"{user.mention} (`{user.id}`)", inline=False)
+    
+    for name, val in fields.items():
+        audit_embed.add_field(name=name, value=val, inline=False)
+        
+    audit_embed.add_field(name="⚡ Resolution Action", value=f"**{decision}**", inline=True)
+    audit_embed.add_field(name="🛠️ Handling Evaluator", value=staff.mention, inline=True)
+    audit_embed.set_footer(text="Ly's Permanent Security Vault Database")
+
+    try:
+        await log_channel.send(embed=audit_embed)
+    except Exception as e:
+        print(f"Failed to post receipt into audit vault: {e}")
+
+# =================================================================
+# THE NEW THREE-BUTTON STAFF CONTROL PANEL
 # =================================================================
 class StaffControlPanel(discord.ui.View):
-    def __init__(self, target_user: discord.User, ticket_type: str):
+    def __init__(self, target_user: discord.User, ticket_type: str, raw_fields: dict):
         super().__init__(timeout=None)
         self.target_user = target_user
-        self.ticket_type = ticket_type # "Incident" or "Review"
+        self.ticket_type = ticket_type
+        self.raw_fields = raw_fields # Saved answers dictionary used during final archiving
 
     @discord.ui.button(label="✅ Approve Case", style=discord.ButtonStyle.success, custom_id="panel_approve_case")
     async def approve_case(self, interaction: discord.Interaction, button: discord.ui.Button):
+        global processed_cases_counter
         if not is_authorized_staff(interaction):
-            return await interaction.response.send_message("❌ Access Denied. Only high-ranking operators can evaluate this case.", ephemeral=True)
+            return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
         
-        await interaction.response.send_message("⚙️ *Processing approval authorization...*")
+        await interaction.response.send_message("⚙️ *Processing case approval actions...*")
+        processed_cases_counter += 1
         
-        # Determine specific DM text layout based on the file category
         if self.ticket_type == "Incident":
-            msg_content = "🛡️ **Ly's Security Operations Notice:** Your recently filed incident report has been thoroughly investigated and **APPROVED** by our team. Action has been taken against the target offender. Thank you for helping keep our community clean!"
+            msg = "🛡️ **Ly's Security Operations Notice:** Your recently filed incident report has been thoroughly investigated and **APPROVED** by our team. Action has been taken against the target offender."
         else:
-            msg_content = "⚖️ **Ly's Review Desk Notice:** Excellent news! Your enforcement appeal has been formally **APPROVED** upon review. Your account status and access permissions are being restored immediately."
+            msg = "⚖️ **Ly's Review Desk Notice:** Excellent news! Your enforcement appeal has been formally **APPROVED** upon review. Your account status is being restored."
 
-        # Attempt to DM the user
-        try:
-            await self.target_user.send(msg_content)
-        except discord.Forbidden:
-            print(f"Could not DM user {self.target_user.id} - DMs locked down.")
+        try: await self.target_user.send(msg)
+        except discord.Forbidden: pass
 
+        # Dispatch historical audit log footprint
+        await send_audit_archive(interaction.guild, f"{self.ticket_type} Approval", self.target_user, self.raw_fields, "APPROVED", interaction.user)
+        
         await asyncio.sleep(2)
         await interaction.channel.delete()
 
     @discord.ui.button(label="❌ Deny Case", style=discord.ButtonStyle.danger, custom_id="panel_deny_case")
     async def deny_case(self, interaction: discord.Interaction, button: discord.ui.Button):
+        global processed_cases_counter
         if not is_authorized_staff(interaction):
-            return await interaction.response.send_message("❌ Access Denied. Only high-ranking operators can evaluate this case.", ephemeral=True)
+            return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
         
-        await interaction.response.send_message("⚙️ *Processing denial authorization...*")
+        await interaction.response.send_message("⚙️ *Processing case denial actions...*")
+        processed_cases_counter += 1
         
         if self.ticket_type == "Incident":
-            msg_content = "🛡️ **Ly's Security Operations Notice:** Your incident report submission has been reviewed and **DENIED**. The provided context or verification data was deemed insufficient to authorize disciplinary actions."
+            msg = "🛡️ **Ly's Security Operations Notice:** Your incident report submission has been reviewed and **DENIED**. Context or verification data was insufficient."
         else:
-            msg_content = "⚖️ **Ly's Review Desk Notice:** Your enforcement appeal has been reviewed and **DENIED**. The restriction penalty against your account remains absolute as per our core server bylaws."
+            msg = "⚖️ **Ly's Review Desk Notice:** Your enforcement appeal has been reviewed and **DENIED**. The restriction penalty remains absolute."
 
-        try:
-            await self.target_user.send(msg_content)
-        except discord.Forbidden:
-            print(f"Could not DM user {self.target_user.id} - DMs locked down.")
+        try: await self.target_user.send(msg)
+        except discord.Forbidden: pass
+
+        await send_audit_archive(interaction.guild, f"{self.ticket_type} Rejection", self.target_user, self.raw_fields, "DENIED", interaction.user)
 
         await asyncio.sleep(2)
         await interaction.channel.delete()
@@ -66,33 +114,20 @@ class StaffControlPanel(discord.ui.View):
     @discord.ui.button(label="🔒 Cancel Session", style=discord.ButtonStyle.secondary, custom_id="panel_cancel_session")
     async def cancel_session(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_authorized_staff(interaction):
-            return await interaction.response.send_message("❌ Access Denied. Only high-ranking operators can terminate this corridor.", ephemeral=True)
+            return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
         
-        await interaction.response.send_message("⚙️ *Session termination authorized. Deleting data corridor instantly...*")
-        await asyncio.sleep(3)
+        await interaction.response.send_message("⚙️ *Terminating data corridor instantly...*")
+        await send_audit_archive(interaction.guild, f"{self.ticket_type} Wiped", self.target_user, self.raw_fields, "TERMINATED/CANCELLED", interaction.user)
+        await asyncio.sleep(2)
         await interaction.channel.delete()
 
 # =================================================================
-# 2. THE POP-UP FORMS (MODALS)
+# THE POP-UP FORMS (MODALS) WITH AI TRIAGING CORES
 # =================================================================
 class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
-    username = discord.ui.TextInput(
-        label="Target Player Account", 
-        placeholder="Exact username of the rule-breaker", 
-        required=True
-    )
-    reason = discord.ui.TextInput(
-        label="Incident Context & Details", 
-        style=discord.TextStyle.paragraph,
-        placeholder="Explain exactly what happened (e.g., glitching, bad behavior). Avoid vague answers.", 
-        required=True
-    )
-    evidence = discord.ui.TextInput(
-        label="Proof / Media Evidence Link", 
-        style=discord.TextStyle.paragraph,
-        placeholder="Paste links to your video or screenshot clips here", 
-        required=True
-    )
+    username = discord.ui.TextInput(label="Target Player Account", placeholder="Username of the rule-breaker", required=True)
+    reason = discord.ui.TextInput(label="Incident Context & Details", style=discord.TextStyle.paragraph, placeholder="Explain carefully what happened...", required=True)
+    evidence = discord.ui.TextInput(label="Proof / Media Evidence Link", style=discord.TextStyle.paragraph, placeholder="Paste links to verification content here", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -104,7 +139,6 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
             guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
-        
         for role in guild.roles:
             if any(k in role.name.lower() for k in admin_keywords):
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
@@ -115,25 +149,34 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
         embed.add_field(name="👤 Flagged Account", value=f"`{self.username.value}`", inline=False)
         embed.add_field(name="📝 Situation Report", value=self.reason.value, inline=False)
         embed.add_field(name="🔗 Attached Verification", value=self.evidence.value, inline=False)
-        embed.set_footer(text=f"Dispatched by: {interaction.user.name} • Evaluation Panel Ready Below")
         
-        # Drop the panel inside the corridor and link it to the user who reported
-        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Incident"))
-        await interaction.followup.send(f"✅ Case registered successfully! Secure channel opened: {channel.mention}", ephemeral=True)
+        # --- THE AI AUTO-TRIAGE INTELLIGENCE STEP ---
+        ai_assessment = "⚠️ *AI triage offline or unavailable.*"
+        try:
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            ai_prompt = (
+                f"You are a professional game server moderation scanner. Review this report:\n"
+                f"Target: {self.username.value}\nReason: {self.reason.value}\nEvidence Link: {self.evidence.value}\n"
+                f"Give a short 2-sentence feedback label summary telling staff if it seems real, missing clear facts, or potentially spam."
+            )
+            response = model.generate_content(ai_prompt)
+            ai_assessment = response.text
+        except Exception as e:
+            print(f"AI Triage fail: {e}")
+
+        embed.add_field(name="🤖 Core AI Pre-Screen Evaluation", value=f"*{ai_assessment}*", inline=False)
+        embed.set_footer(text=f"Dispatched by: {interaction.user.name}")
+        
+        saved_fields = {"Target Player": self.username.value, "Report Details": self.reason.value, "Media Links": self.evidence.value}
+        
+        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Incident", raw_fields=saved_fields))
+        await interaction.followup.send(f"✅ Case registered! Secure channel opened: {channel.mention}", ephemeral=True)
 
 
 class BanAppealModal(discord.ui.Modal, title="Review Request System"):
-    username = discord.ui.TextInput(
-        label="Your In-Game Username", 
-        placeholder="The account name that was restricted", 
-        required=True
-    )
-    reason = discord.ui.TextInput(
-        label="Case Argument / Defense Statement", 
-        style=discord.TextStyle.paragraph,
-        placeholder="Explain carefully why this restriction should be lifted or modified.", 
-        required=True
-    )
+    username = discord.ui.TextInput(label="Your In-Game Username", placeholder="The account name that was restricted", required=True)
+    reason = discord.ui.TextInput(label="Case Argument / Defense Statement", style=discord.TextStyle.paragraph, placeholder="Explain carefully why you should be unbanned...", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -155,27 +198,41 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
         embed.add_field(name="👤 Restricted Account", value=f"`{self.username.value}`", inline=True)
         embed.add_field(name="🆔 Discord Contact", value=interaction.user.mention, inline=True)
         embed.add_field(name="📝 Defense Arguments", value=self.reason.value, inline=False)
+        
+        # --- THE AI AUTO-TRIAGE INTELLIGENCE STEP ---
+        ai_assessment = "⚠️ *AI triage offline or unavailable.*"
+        try:
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            ai_prompt = (
+                f"You are a professional server unban appeal screener. Review this argument:\n"
+                f"Account: {self.username.value}\nDefense Argument: {self.reason.value}\n"
+                f"Give a short 2-sentence summary telling staff if the user sounds honest and detailed, or if they are giving standard fake unban excuses like 'it was my brother'."
+            )
+            response = model.generate_content(ai_prompt)
+            ai_assessment = response.text
+        except Exception as e:
+            print(f"AI Triage fail: {e}")
+
+        embed.add_field(name="🤖 Core AI Pre-Screen Evaluation", value=f"*{ai_assessment}*", inline=False)
         embed.set_footer(text="Awaiting review panel decision...")
         
-        # Drop the panel inside the corridor and link it to the user who appealed
-        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Review"))
+        saved_fields = {"Account Username": self.username.value, "Defense Reasons Given": self.reason.value}
+        
+        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Review", raw_fields=saved_fields))
         await interaction.followup.send(f"✅ Review request sent! Data room opened: {channel.mention}", ephemeral=True)
 
 # =================================================================
-# 3. THE MAIN INTERACTIVE DASHBOARD BOARDS
+# COMPONENT ROUTING TRIGGERS
 # =================================================================
 class ReportButtonView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
+    def __init__(self): super().__init__(timeout=None)
     @discord.ui.button(label="File Incident Report 🚩", style=discord.ButtonStyle.danger, custom_id="trigger_player_report")
     async def click_report(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(PlayerReportModal())
 
 class AppealButtonView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
+    def __init__(self): super().__init__(timeout=None)
     @discord.ui.button(label="Request Case Review 📑", style=discord.ButtonStyle.primary, custom_id="trigger_ban_appeal")
     async def click_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(BanAppealModal())
@@ -185,57 +242,41 @@ class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    async def cog_load(self):
+        # Start background streaming loop to feed live website counters
+        if not self.update_web_metrics.is_running():
+            self.update_web_metrics.start()
+
+    async def cog_unload(self):
+        self.update_web_metrics.cancel()
+
+    # LOOP TASK: Recalculate total user states every 10 seconds and push to Flask web panel
+    @tasks.loop(seconds=10)
+    async def update_web_metrics(self):
+        await self.bot.wait_until_ready()
+        
+        total_members = sum(g.member_count for g in self.bot.guilds if g.member_count)
+        
+        # Mutate the global Flask layout parameters inside keep_alive
+        keep_alive.LIVE_STATS["servers"] = len(self.bot.guilds)
+        keep_alive.LIVE_STATS["users"] = total_members
+        keep_alive.LIVE_STATS["processed"] = processed_cases_counter
+
     @app_commands.command(name="adduiplayerreport", description="Deploy the custom incident reporting layout center")
-    @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_report(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if interaction.user.name != OWNER_USERNAME:
-            return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
-            
+        if interaction.user.name != OWNER_USERNAME: return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
-        
-        embed = discord.Embed(
-            title="🛡️ Integrity Operations Center",
-            description=(
-                "See someone breaking our core guidelines or using illegal exploits? Help keep our game safe.\n\n"
-                "**Submission Guidelines:**\n"
-                "• Provide the exact target profile name.\n"
-                "• Include direct media links (clips/screencaps) showing the violation.\n\n"
-                "Click the dispatch button below to securely brief our staff agents."
-            ),
-            color=discord.Color.dark_red()
-        )
-        embed.set_footer(text="Ly's Automated Moderation Core • Secure Line")
-        
+        embed = discord.Embed(title="🛡️ Integrity Operations Center", description="See someone breaking guidelines or using exploits? Click below to brief our staff agents.", color=discord.Color.dark_red())
         await channel.send(embed=embed, view=ReportButtonView())
-        await interaction.followup.send(f"✅ Security interface deployed in {channel.mention}!", ephemeral=True)
+        await interaction.followup.send("✅ Security interface deployed!", ephemeral=True)
 
     @app_commands.command(name="adduiappealban", description="Deploy the custom account restriction appeal desk")
-    @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_appeal(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if interaction.user.name != OWNER_USERNAME:
-            return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
-            
+        if interaction.user.name != OWNER_USERNAME: return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
-        
-        embed = discord.Embed(
-            title="⚖️ Enforcement Appeal Operations",
-            description=(
-                "If an administrative action was taken against your account and you believe it was done in error, you may present your arguments below.\n\n"
-                "**Review Protocols (Must Follow):**\n"
-                "• State your accurate in-game username.\n"
-                "• Detail exactly why the restriction should be reversed or mitigated.\n"
-                "• Supply any critical context or validation material to aid your case.\n\n"
-                "**CRITICAL SECURITY RULES:**\n"
-                "• Exploiting infractions are designated as **NON-NEGOTIABLE** and will not receive second-chance overrides.\n"
-                "• Restrictions older than **30 days** are archived and permanently locked from future evaluations.\n\n"
-                "*Every submission creates a private corridor directly with high staff. Please do not ping personnel after opening.*"
-            ),
-            color=discord.Color.from_rgb(32, 34, 37)
-        )
-        embed.set_footer(text="Ly's Automated Review Systems • Legal Core")
-        
+        embed = discord.Embed(title="⚖️ Enforcement Appeal Operations", description="If an action was taken against your account in error, present your arguments below.", color=discord.Color.from_rgb(32, 34, 37))
         await channel.send(embed=embed, view=AppealButtonView())
-        await interaction.followup.send(f"✅ Appeal interface deployed in {channel.mention}!", ephemeral=True)
+        await interaction.followup.send("✅ Appeal interface deployed!", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Tickets(bot))
