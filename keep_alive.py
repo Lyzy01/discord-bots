@@ -142,7 +142,7 @@ HTML_TEMPLATE = """
             padding: 0 25px;
         }
 
-        /* Safety & Policy Banner */
+        /* Safety Assurance Panel Banner */
         .safety-banner {
             background: linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(22, 28, 45, 0.3) 100%);
             border: 1px solid rgba(16, 185, 129, 0.15);
@@ -175,7 +175,7 @@ HTML_TEMPLATE = """
             font-size: 0.95rem;
         }
 
-        /* Split-Column Architecture Layout */
+        /* Split Left / Right Component Grid */
         .split-grid {
             display: grid;
             grid-template-columns: 1.2fr 0.8fr;
@@ -371,45 +371,45 @@ HTML_TEMPLATE = """
         <div class="split-grid">
             
             <div class="section">
-                <h2>📖 Complete Deployment & Operations Tutorial</h2>
-                <div class="sec-desc">Follow these configuration procedures to initialize core services safely across your server directories:</div>
+                <h2>📖 Interactive Ticket & Triage User Manual</h2>
+                <div class="sec-desc">How to open, manage, and process cases smoothly using our custom integration channels:</div>
                 
                 <div class="step-item">
                     <div class="step-num">1</div>
                     <div class="step-text">
-                        <h4>Environmental Initialization</h4>
-                        <p>Verify your environment parameters inside your Render hosting portal. Ensure your application securely loads your active Discord token variables and Groq API orchestration keys.</p>
+                        <h4>Filing an Incident Report</h4>
+                        <p>Click the red <span class="code-tag">File Incident Report 🚩</span> button. A pop-up form will appear asking for the rule-breaker's name, situational details, and proof links.</p>
                     </div>
                 </div>
 
                 <div class="step-item">
                     <div class="step-num">2</div>
                     <div class="step-text">
-                        <h4>Construct Structural Logs Vault</h4>
-                        <p>Create a dedicated staff channel named exactly <span class="code-tag">#staff-audit-logs</span>. Configure permissions so only managers can read its history, ensuring your private AI analysis summaries remain confidential.</p>
+                        <h4>Submitting a Ban Appeal</h4>
+                        <p>Click the blue <span class="code-tag">Request Case Review 📑</span> button. Enter your in-game details and context to explain your defense argument to the review team.</p>
                     </div>
                 </div>
 
                 <div class="step-item">
                     <div class="step-num">3</div>
                     <div class="step-text">
-                        <h4>Deploy Interactive Interfaces</h4>
-                        <p>Execute the application setup commands in your target public rooms: use <span class="code-tag">/adduiplayerreport</span> for the reporting widget, or <span class="code-tag">/adduiappealban</span> for the restriction appeal terminal.</p>
+                        <h4>Private Working Corridors</h4>
+                        <p>Once submitted, a unique text channel (e.g., <span class="code-tag">#incident-username</span>) creates instantly. Only you and authorized server staff roles can read or type inside it.</p>
                     </div>
                 </div>
 
                 <div class="step-item">
                     <div class="step-num">4</div>
                     <div class="step-text">
-                        <h4>Process Background Triage</h4>
-                        <p>When users open a case, a new room creates instantly. Your staff handles evaluation buttons safely while the background pre-screening AI delivers contextual assessments straight into your vault channel.</p>
+                        <h4>Staff Resolution Center</h4>
+                        <p>Moderators review the data using embedded control buttons. Clicking **Approve Case** or **Deny Case** notifies the user and completely files the logs away securely.</p>
                     </div>
                 </div>
             </div>
 
             <div class="section">
-                <h2>🔐 Channel Permission Requirements</h2>
-                <div class="sec-desc">Verify that Ly's system integrated application role card possesses these configuration values inside server settings:</div>
+                <h2>🔐 Bot Role & Permission Setup</h2>
+                <div class="sec-desc">Ensure the system's integrated application role card possesses these properties in your server settings:</div>
                 
                 <div class="perm-wrapper">
                     <div class="perm-card">
@@ -417,7 +417,7 @@ HTML_TEMPLATE = """
                             <span class="perm-title">📁 Manage Channels</span>
                             <span class="perm-badge badge-req">Required</span>
                         </div>
-                        <p class="perm-text">Allows the system to automatically spin up and provision secure ticket rooms for ongoing case files.</p>
+                        <p class="perm-text">Allows the bot to automatically spin up, provision, and cleanly archive custom user ticket rooms.</p>
                     </div>
 
                     <div class="perm-card">
@@ -425,7 +425,7 @@ HTML_TEMPLATE = """
                             <span class="perm-title">💬 Send Messages</span>
                             <span class="perm-badge badge-req">Required</span>
                         </div>
-                        <p class="perm-text">Enables transmission of operational dialogue layouts and button control views into case dockets.</p>
+                        <p class="perm-text">Enables transmission of operational dialogue forms, selection menus, and button controllers.</p>
                     </div>
 
                     <div class="perm-card">
@@ -433,15 +433,15 @@ HTML_TEMPLATE = """
                             <span class="perm-title">🔗 Embed Links</span>
                             <span class="perm-badge badge-req">Required</span>
                         </div>
-                        <p class="perm-text">Necessary for formatting clear, colored triage embeds and structured summary log receipts.</p>
+                        <p class="perm-text">Necessary for formatting high-fidelity triage summaries and colored audit logs.</p>
                     </div>
 
                     <div class="perm-card">
                         <div class="perm-header">
-                            <span class="perm-title">📬 Direct Messages</span>
-                            <span class="perm-badge badge-opt">Optional</span>
+                            <span class="perm-title">🛡️ Required Staff Roles</span>
+                            <span class="perm-badge badge-opt">Important</span>
                         </div>
-                        <p class="perm-text">Used to safely send notification statuses directly to users when case evaluations update.</p>
+                        <p class="perm-text">Moderators must have a role containing the words <b>"admin"</b>, <b>"moderator"</b>, <b>"staff"</b>, or <b>"owner"</b> to operate panel closeout actions.</p>
                     </div>
                 </div>
             </div>
