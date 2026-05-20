@@ -59,7 +59,6 @@ class Music(commands.Cog):
     @app_commands.command(name="play", description="🎵 Stream music into your current voice channel.")
     @app_commands.describe(query="Song title, keywords, or direct audio track link")
     async def play(self, interaction: discord.Interaction, query: str):
-        # We use a long defer time since cloud servers need an extra moment to handle voice handshakes
         await interaction.response.defer(ephemeral=False)
         
         if not interaction.user.voice or not interaction.user.voice.channel:
@@ -70,35 +69,30 @@ class Music(commands.Cog):
         voice_client = interaction.guild.voice_client
 
         try:
-            # If the bot is stuck in a weird half-connected state, clear it out completely first
-            if voice_client and not voice_client.is_connected():
+            # Clear out any broken, dangling, or un-synchronized voice clients safely
+            if voice_client:
                 try:
                     await voice_client.disconnect(force=True)
                 except:
                     pass
-                voice_client = None
+                await asyncio.sleep(1.0)
 
-            # Connect fresh or move smoothly
-            if voice_client is None:
-                voice_client = await voice_channel.connect(timeout=20.0, reconnect=True)
-                await asyncio.sleep(2.0)  # Give Discord plenty of time to set up the region routing
-            elif voice_client.channel != voice_channel:
-                await voice_client.move_to(voice_channel)
-                await asyncio.sleep(2.0)
+            # Connect fresh with standard options
+            # Setting self_deaf=True speeds up the voice handshake significantly
+            voice_client = await voice_channel.connect(timeout=30.0, reconnect=True, self_deaf=True)
+            await asyncio.sleep(2.0) 
 
-            # Start fetching the audio track information
+            # Start pulling down the SoundCloud track metadata in the background
             player = await MusicPlayerSource.from_url(query, loop=self.bot.loop, stream=True)
             
-            # Stop any overlapping audio tracks if something is already playing
+            # Double check to make sure the client didn't drop mid-download
+            if not voice_client.is_connected():
+                raise Exception("Voice interface dropped connection during metadata extraction. Please try again.")
+
             if voice_client.is_playing():
                 voice_client.stop()
 
-            # Final check to make sure the gateway connection didn't drop during extraction
-            if not voice_client.is_connected():
-                await voice_client.disconnect(force=True)
-                voice_client = await voice_channel.connect(timeout=20.0, reconnect=True)
-                await asyncio.sleep(2.0)
-
+            # Pass audio into the native FFmpeg stream player
             voice_client.play(player, after=lambda e: print(f"Audio stream notification: {e}") if e else None)
             
             embed = discord.Embed(
@@ -110,6 +104,12 @@ class Music(commands.Cog):
             await interaction.followup.send(embed=embed)
 
         except Exception as e:
+            # Auto-clean broken connections if the play attempt fails midway
+            if voice_client:
+                try:
+                    await voice_client.disconnect(force=True)
+                except:
+                    pass
             await interaction.followup.send(f"⚠️ **Audio Stream Extraction Failure:** `{e}`")
 
     @app_commands.command(name="stop", description="🛑 Halt audio playback and disconnect from voice.")
