@@ -22,12 +22,10 @@ def is_authorized_staff(interaction: discord.Interaction) -> bool:
 # =================================================================
 async def send_audit_archive(guild: discord.Guild, title: str, user: discord.User, fields: dict, decision: str, staff: discord.User):
     """Locates or builds a permanent logging audit text channel and records a receipt."""
-    # Look for a secure logging corridor channel
     log_channel = discord.utils.get(guild.text_channels, name="staff-audit-logs")
     
     if not log_channel:
         try:
-            # Safe creation hidden away from standard viewers
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False),
                 guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
@@ -38,7 +36,6 @@ async def send_audit_archive(guild: discord.Guild, title: str, user: discord.Use
             print(f"Failed to auto-spawn log vault channel: {e}")
             return
 
-    # Determine signature colors
     color = discord.Color.green() if decision == "APPROVED" else (discord.Color.red() if decision == "DENIED" else discord.Color.greyple())
 
     audit_embed = discord.Embed(title=f"📋 Archive Record: {title}", color=color)
@@ -57,14 +54,14 @@ async def send_audit_archive(guild: discord.Guild, title: str, user: discord.Use
         print(f"Failed to post receipt into audit vault: {e}")
 
 # =================================================================
-# THE NEW THREE-BUTTON STAFF CONTROL PANEL
+# THE THREE-BUTTON STAFF CONTROL PANEL
 # =================================================================
 class StaffControlPanel(discord.ui.View):
     def __init__(self, target_user: discord.User, ticket_type: str, raw_fields: dict):
         super().__init__(timeout=None)
         self.target_user = target_user
         self.ticket_type = ticket_type
-        self.raw_fields = raw_fields # Saved answers dictionary used during final archiving
+        self.raw_fields = raw_fields
 
     @discord.ui.button(label="✅ Approve Case", style=discord.ButtonStyle.success, custom_id="panel_approve_case")
     async def approve_case(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -83,7 +80,6 @@ class StaffControlPanel(discord.ui.View):
         try: await self.target_user.send(msg)
         except discord.Forbidden: pass
 
-        # Dispatch historical audit log footprint
         await send_audit_archive(interaction.guild, f"{self.ticket_type} Approval", self.target_user, self.raw_fields, "APPROVED", interaction.user)
         
         await asyncio.sleep(2)
@@ -150,7 +146,6 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
         embed.add_field(name="📝 Situation Report", value=self.reason.value, inline=False)
         embed.add_field(name="🔗 Attached Verification", value=self.evidence.value, inline=False)
         
-        # --- THE AI AUTO-TRIAGE INTELLIGENCE STEP ---
         ai_assessment = "⚠️ *AI triage offline or unavailable.*"
         try:
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -199,7 +194,6 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
         embed.add_field(name="🆔 Discord Contact", value=interaction.user.mention, inline=True)
         embed.add_field(name="📝 Defense Arguments", value=self.reason.value, inline=False)
         
-        # --- THE AI AUTO-TRIAGE INTELLIGENCE STEP ---
         ai_assessment = "⚠️ *AI triage offline or unavailable.*"
         try:
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -226,42 +220,41 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
 # COMPONENT ROUTING TRIGGERS
 # =================================================================
 class ReportButtonView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
+    def __init__(self): 
+        super().__init__(timeout=None)
     @discord.ui.button(label="File Incident Report 🚩", style=discord.ButtonStyle.danger, custom_id="trigger_player_report")
     async def click_report(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(PlayerReportModal())
 
 class AppealButtonView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
+    def __init__(self): 
+        super().__init__(timeout=None)
     @discord.ui.button(label="Request Case Review 📑", style=discord.ButtonStyle.primary, custom_id="trigger_ban_appeal")
     async def click_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(BanAppealModal())
 
-
+# =================================================================
+# THE MAIN COG CLASS
+# =================================================================
 class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     async def cog_load(self):
-        # This is the proper, safe place to launch tasks once the cog is fully bound
         if not self.update_web_metrics.is_running():
             self.update_web_metrics.start()
 
     async def cog_unload(self):
         self.update_web_metrics.cancel()
 
-    # LOOP TASK: Recalculate stats every 10 seconds and push to Flask web panel
     @tasks.loop(seconds=10)
     async def update_web_metrics(self):
-        # Safe check to make sure the bot is fully logged in before scanning servers
         if not self.bot.is_ready():
             return
-            
         try:
             total_servers = len(self.bot.guilds)
             total_members = sum(g.member_count for g in self.bot.guilds if g.member_count)
             
-            # Mutate the live website parameters safely
             keep_alive.LIVE_STATS["servers"] = total_servers
             keep_alive.LIVE_STATS["users"] = total_members
             keep_alive.LIVE_STATS["processed"] = processed_cases_counter
@@ -272,7 +265,7 @@ class Tickets(commands.Cog):
     @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_report(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if interaction.user.name != OWNER_USERNAME: 
-            return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
+            return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title="🛡️ Integrity Operations Center", description="See someone breaking guidelines or using exploits? Click below to brief our staff agents.", color=discord.Color.dark_red())
         await channel.send(embed=embed, view=ReportButtonView())
@@ -282,7 +275,7 @@ class Tickets(commands.Cog):
     @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_appeal(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if interaction.user.name != OWNER_USERNAME: 
-            return await interaction.response.send_message("❌ Restricted.", ephemeral=True)
+            return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title="⚖️ Enforcement Appeal Operations", description="If an action was taken against your account in error, present your arguments below.", color=discord.Color.from_rgb(32, 34, 37))
         await channel.send(embed=embed, view=AppealButtonView())
