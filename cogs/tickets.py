@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 import asyncio
-import google.generativeai as genai
+from groq import Groq
 import os
 import keep_alive
 
@@ -118,7 +118,7 @@ class StaffControlPanel(discord.ui.View):
         await interaction.channel.delete()
 
 # =================================================================
-# THE POP-UP FORMS (MODALS) WITH AI TRIAGING CORES
+# THE POP-UP FORMS (MODALS) WITH ASYNCHRONOUS GROQ AI TRIAGING CORES
 # =================================================================
 class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
     username = discord.ui.TextInput(label="Target Player Account", placeholder="Username of the rule-breaker", required=True)
@@ -145,28 +145,42 @@ class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
         embed.add_field(name="👤 Flagged Account", value=f"`{self.username.value}`", inline=False)
         embed.add_field(name="📝 Situation Report", value=self.reason.value, inline=False)
         embed.add_field(name="🔗 Attached Verification", value=self.evidence.value, inline=False)
-        
-        ai_assessment = "⚠️ *AI triage offline or unavailable.*"
-        try:
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            ai_prompt = (
-                f"You are a professional game server moderation scanner. Review this report:\n"
-                f"Target: {self.username.value}\nReason: {self.reason.value}\nEvidence Link: {self.evidence.value}\n"
-                f"Give a short 2-sentence feedback label summary telling staff if it seems real, missing clear facts, or potentially spam."
-            )
-            response = model.generate_content(ai_prompt)
-            ai_assessment = response.text
-        except Exception as e:
-            print(f"AI Triage fail: {e}")
-
-        embed.add_field(name="🤖 Core AI Pre-Screen Evaluation", value=f"*{ai_assessment}*", inline=False)
+        embed.add_field(name="🤖 Core AI Pre-Screen Evaluation", value="⏳ *Analyzing report context via Groq AI cluster framework...*", inline=False)
         embed.set_footer(text=f"Dispatched by: {interaction.user.name}")
         
         saved_fields = {"Target Player": self.username.value, "Report Details": self.reason.value, "Media Links": self.evidence.value}
         
-        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Incident", raw_fields=saved_fields))
+        panel_msg = await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Incident", raw_fields=saved_fields))
         await interaction.followup.send(f"✅ Case registered! Secure channel opened: {channel.mention}", ephemeral=True)
+
+        # Offload the slow Groq API generation request asynchronously
+        async def fetch_ai_assessment():
+            try:
+                loop = asyncio.get_event_loop()
+                def call_groq():
+                    # Pulls GROQ_API_KEY from your Render dashboard settings
+                    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+                    ai_prompt = (
+                        f"You are a professional game server moderation scanner. Review this report:\n"
+                        f"Target: {self.username.value}\nReason: {self.reason.value}\nEvidence Link: {self.evidence.value}\n"
+                        f"Give a short 2-sentence feedback label summary telling staff if it seems real, missing clear facts, or potentially spam."
+                    )
+                    completion = client.chat.completions.create(
+                        model="llama3-8b-8192",
+                        messages=[{"role": "user", "content": ai_prompt}],
+                        temperature=0.5,
+                        max_tokens=150
+                    )
+                    return completion.choices[0].message.content
+                
+                ai_assessment = await loop.run_in_executor(None, call_groq)
+            except Exception as e:
+                ai_assessment = f"⚠️ *AI triage processing error: {e}*"
+
+            embed.set_field_at(3, name="🤖 Core AI Pre-Screen Evaluation", value=f"*{ai_assessment}*", inline=False)
+            await panel_msg.edit(embed=embed)
+
+        asyncio.create_task(fetch_ai_assessment())
 
 
 class BanAppealModal(discord.ui.Modal, title="Review Request System"):
@@ -193,28 +207,41 @@ class BanAppealModal(discord.ui.Modal, title="Review Request System"):
         embed.add_field(name="👤 Restricted Account", value=f"`{self.username.value}`", inline=True)
         embed.add_field(name="🆔 Discord Contact", value=interaction.user.mention, inline=True)
         embed.add_field(name="📝 Defense Arguments", value=self.reason.value, inline=False)
-        
-        ai_assessment = "⚠️ *AI triage offline or unavailable.*"
-        try:
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            ai_prompt = (
-                f"You are a professional server unban appeal screener. Review this argument:\n"
-                f"Account: {self.username.value}\nDefense Argument: {self.reason.value}\n"
-                f"Give a short 2-sentence summary telling staff if the user sounds honest and detailed, or if they are giving standard fake unban excuses like 'it was my brother'."
-            )
-            response = model.generate_content(ai_prompt)
-            ai_assessment = response.text
-        except Exception as e:
-            print(f"AI Triage fail: {e}")
-
-        embed.add_field(name="🤖 Core AI Pre-Screen Evaluation", value=f"*{ai_assessment}*", inline=False)
+        embed.add_field(name="🤖 Core AI Pre-Screen Evaluation", value="⏳ *Analyzing defense context via Groq AI cluster framework...*", inline=False)
         embed.set_footer(text="Awaiting review panel decision...")
         
         saved_fields = {"Account Username": self.username.value, "Defense Reasons Given": self.reason.value}
         
-        await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Review", raw_fields=saved_fields))
+        panel_msg = await channel.send(embed=embed, view=StaffControlPanel(target_user=interaction.user, ticket_type="Review", raw_fields=saved_fields))
         await interaction.followup.send(f"✅ Review request sent! Data room opened: {channel.mention}", ephemeral=True)
+
+        # Offload the slow Groq API request asynchronously
+        async def fetch_ai_assessment():
+            try:
+                loop = asyncio.get_event_loop()
+                def call_groq():
+                    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+                    ai_prompt = (
+                        f"You are a professional server unban appeal screener. Review this argument:\n"
+                        f"Account: {self.username.value}\nDefense Argument: {self.reason.value}\n"
+                        f"Give a short 2-sentence summary telling staff if the user sounds honest and detailed, or if they are giving standard fake unban excuses like 'it was my brother'."
+                    )
+                    completion = client.chat.completions.create(
+                        model="llama3-8b-8192",
+                        messages=[{"role": "user", "content": ai_prompt}],
+                        temperature=0.5,
+                        max_tokens=150
+                    )
+                    return completion.choices[0].message.content
+                
+                ai_assessment = await loop.run_in_executor(None, call_groq)
+            except Exception as e:
+                ai_assessment = f"⚠️ *AI triage processing error: {e}*"
+
+            embed.set_field_at(3, name="🤖 Core AI Pre-Screen Evaluation", value=f"*{ai_assessment}*", inline=False)
+            await panel_msg.edit(embed=embed)
+
+        asyncio.create_task(fetch_ai_assessment())
 
 # =================================================================
 # COMPONENT ROUTING TRIGGERS
