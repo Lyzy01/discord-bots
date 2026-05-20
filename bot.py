@@ -1,40 +1,42 @@
 import discord
 from discord.ext import commands
 import os
-import asyncio
-from dotenv import load_dotenv
 from keep_alive import keep_alive
 
-load_dotenv()
-
+# Initialize bot with all necessary intents
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
+    print(f"🤖 Connected successfully as: {bot.user.name}")
+    print(f"🆔 Bot ID: {bot.user.id}")
+    
+    # Sync slash commands globally with Discord
     try:
         synced = await bot.tree.sync()
-        print(f"✅ Synced {len(synced)} slash commands")
+        print(f"✅ Synced {len(synced)} slash commands globally!")
     except Exception as e:
-        print(f"❌ Failed to sync: {e}")
-    await bot.change_presence(
-        status=discord.Status.online,
-        activity=discord.Activity(type=discord.ActivityType.watching, name="over the server 👀")
-    )
+        print(f"❌ Failed to sync commands: {e}")
+        
+    await bot.change_presence(activity=discord.Game(name="Watching over the server 👀"))
 
 async def load_cogs():
-    for cog in ['general', 'moderation', 'fun', 'music']:
+    # Loading all 5 cogs cleanly
+    for cog in ['general', 'moderation', 'fun', 'music', 'ai']:
         try:
             await bot.load_extension(f'cogs.{cog}')
-            print(f"✅ Loaded: {cog}")
+            print(f"📁 Cog Loaded: {cog}")
         except Exception as e:
-            print(f"❌ Failed to load {cog}: {e}")
+            print(f"❌ Failed to load cog [{cog}]: {e}")
 
 async def main():
-    keep_alive()
     async with bot:
         await load_cogs()
-        await bot.start(os.getenv('DISCORD_TOKEN'))
+        # Reads token from Render Environment Variables
+        await bot.start(os.getenv("DISCORD_TOKEN"))
 
-asyncio.run(main())
+if __name__ == "__main__":
+    keep_alive()  # Starts Flask web server for Render
+    import asyncio
+    asyncio.run(main())
