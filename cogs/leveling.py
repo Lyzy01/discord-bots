@@ -38,7 +38,51 @@ class Leveling(commands.Cog):
         if level >= 5000:  return "🧠 [ Mainframe Overlord ]"
         if level >= 1000:  return "💾 [ Data Warden ]"
         if level >= 100:   return "⚡ [ Netrunner Elite ]"
-        return "🌱 [ I Just Started ]"
+        return "🌱 [ Script Kiddie ]"
+
+    # --- AUTOMATIC ROLE GENERATOR & ASSIGNER ---
+    async def check_and_assign_role(self, member, level):
+        guild = member.guild
+        guild_id = str(guild.id)
+        
+        # Default milestones
+        milestones = [1, 5, 10, 20, 30, 40, 50, 100, 500, 1000]
+        if level not in milestones:
+            return
+
+        role_name = f"Level {level}+"
+        role = discord.utils.get(guild.roles, name=role_name)
+        
+        # Check if an admin previously defined a custom hex color for this milestone
+        chosen_color = discord.Color.from_rgb(max(50, 255 - (level * 2)), min(200, 50 + (level * 2)), 230) # Default color
+        if guild_id in self.data and "role_colors" in self.data[guild_id]:
+            hex_str = self.data[guild_id]["role_colors"].get(str(level))
+            if hex_str:
+                try:
+                    # Strip '#' if present and convert hex to discord Color
+                    hex_clean = hex_str.lstrip('#')
+                    chosen_color = discord.Color(int(hex_clean, 16))
+                except ValueError:
+                    pass
+
+        # If role doesn't exist, build it
+        if role is None:
+            try:
+                role = await guild.create_role(
+                    name=role_name, 
+                    color=chosen_color, 
+                    reason="Automated Leveling Milestone System"
+                )
+            except discord.Forbidden:
+                print(f"❌ Missing 'Manage Roles' permission to create: {role_name}")
+                return
+
+        # Assign it
+        if role and role not in member.roles:
+            try:
+                await member.add_roles(role)
+            except discord.Forbidden:
+                print(f"❌ Cannot assign role {role_name}. Ensure bot role is ranked higher.")
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -49,7 +93,8 @@ class Leveling(commands.Cog):
         user_id = str(message.author.id)
 
         if guild_id not in self.data:
-            self.data[guild_id] = {"users": {}, "custom_titles": {}}
+            self.data[guild_id] = {"users": {}, "custom_titles": {}, "role_colors": {}}
+        
         if "users" not in self.data[guild_id]:
             self.data[guild_id]["users"] = {}
 
@@ -72,6 +117,8 @@ class Leveling(commands.Cog):
             user_profile["level"] = current_lvl
             user_profile["xp"] = current_xp
 
+            await self.check_and_assign_role(message.author, current_lvl)
+
             try:
                 await message.channel.send(f"⚡ **SYSTEM UPDATE** | {message.author.mention} has upgraded to **Level {current_lvl}**!")
             except discord.Forbidden:
@@ -79,9 +126,7 @@ class Leveling(commands.Cog):
 
         self.save_data()
 
-    @app_commands.command(name="level", description="Displays your current server level and rank profile via interactive card.")
-    async def level_command(self, interaction: discord.Interaction, member: discord.Member = None):
-        member = member or interaction.user
+    async def generate_level_embed(self, interaction: discord.Interaction, member: discord.Member):
         guild_id = str(interaction.guild.id)
         user_id = str(member.id)
 
@@ -96,7 +141,7 @@ class Leveling(commands.Cog):
         
         if level >= MAX_LEVEL:
             progress_bar = "██████████"
-            xp_display = "MAX STATUS ACHIVEMENT"
+            xp_display = "MAX STATUS ACHIEVEMENT"
         else:
             next_lvl_xp = (level + 1) * 100
             filled = math.floor((xp / next_lvl_xp) * 10)
@@ -104,7 +149,6 @@ class Leveling(commands.Cog):
             progress_bar = "█" * filled + "░" * (10 - filled)
             xp_display = f"{xp:,} / {next_lvl_xp:,} XP"
 
-        # Modern UI Framework design using Discord Embeds
         embed = discord.Embed(
             title=f"👤 {member.display_name}'s Progress Core",
             color=discord.Color.purple()
@@ -114,12 +158,59 @@ class Leveling(commands.Cog):
         embed.add_field(name="📈 Node Level Status", value=f"**Level {level:,}** / `{MAX_LEVEL:,}`", inline=True)
         embed.add_field(name="📊 Sync Progress Bar", value=f"`[{progress_bar}]` \n*{xp_display}*", inline=False)
         embed.set_footer(text=f"Server Identity Index: {interaction.guild.name}")
+        
+        return embed
 
+    @app_commands.command(name="level", description="Displays your current server level and rank profile.")
+    async def level_command(self, interaction: discord.Interaction, member: discord.Member = None):
+        member = member or interaction.user
+        embed = await self.generate_level_embed(interaction, member)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="profile", description="Displays your server level status.")
+    @app_commands.command(name="profile", description="Displays your server profile status.")
     async def profile(self, interaction: discord.Interaction, member: discord.Member = None):
-        await self.level_command(interaction, member)
+        member = member or interaction.user
+        embed = await self.generate_level_embed(interaction, member)
+        await interaction.response.send_message(embed=embed)
+
+    # --- ADMIN/HIGHER RANK COLOR MODIFIER COMMAND ---
+    @app_commands.command(name="setrolecolor", description="Changes the color of an existing level milestone role.")
+    @app_commands.describe(level="The level milestone (e.g., 1, 5, 10)", hex_color="The Hex color code (e.g., #FF5555 or 00FFCC)")
+    @app_commands.default_permissions(manage_roles=True)
+    async def set_role_color(self, interaction: discord.Interaction, level: int, hex_color: str):
+        guild = interaction.guild
+        guild_id = str(guild.id)
+
+        # Secure parsing of hex string
+        clean_hex = hex_color.lstrip('#')
+        try:
+            resolved_color = discord.Color(int(clean_hex, 16))
+        except ValueError:
+            await interaction.response.send_message("❌ Error: Invalid Hex code format. Use formats like `#FF5555` or `00FFCC`.", ephemeral=True)
+            return
+
+        # Check if database components exist
+        if guild_id not in self.data:
+            self.data[guild_id] = {"users": {}, "custom_titles": {}, "role_colors": {}}
+        if "role_colors" not in self.data[guild_id]:
+            self.data[guild_id]["role_colors"] = {}
+
+        # Save to local state
+        self.data[guild_id]["role_colors"][str(level)] = f"#{clean_hex}"
+        self.save_data()
+
+        # Update the live role inside Discord if it already exists
+        target_role_name = f"Level {level}+"
+        existing_role = discord.utils.get(guild.roles, name=target_role_name)
+        
+        if existing_role:
+            try:
+                await existing_role.edit(color=resolved_color, reason=f"Color modified via /setrolecolor by {interaction.user}")
+                await interaction.response.send_message(f"✅ Modified color for **{target_role_name}** to `#{clean_hex}` successfully across the server!")
+            except discord.Forbidden:
+                await interaction.response.send_message("❌ Error: Bot position hierarchy is lower than the target level role. Drag the bot's role higher in Server Settings!", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"💾 Saved configuration! Next time a user updates to **Level {level}**, their new role will spawn with `#{clean_hex}`.")
 
     @app_commands.command(name="renamelevel", description="Sets a custom rank title for a level milestone.")
     @app_commands.default_permissions(manage_guild=True)
@@ -135,7 +226,7 @@ class Leveling(commands.Cog):
             return
 
         if guild_id not in self.data:
-            self.data[guild_id] = {"users": {}, "custom_titles": {}}
+            self.data[guild_id] = {"users": {}, "custom_titles": {}, "role_colors": {}}
         if "custom_titles" not in self.data[guild_id]:
             self.data[guild_id]["custom_titles"] = {}
 
