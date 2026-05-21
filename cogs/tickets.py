@@ -8,6 +8,8 @@ from datetime import datetime
 import keep_alive
 
 OWNER_USERNAME = "kimmendez01"
+# Hardcoded personal ID to guarantee DM routing across different servers
+OWNER_DISCORD_ID = 1366110873248071801  
 
 # Counter to log processed files globally across memory resets
 processed_cases_counter = 0
@@ -183,16 +185,22 @@ class BugReportModal(discord.ui.Modal, title="Report Bugs & Errors"):
     details = discord.ui.TextInput(label="Error Details / Reproduction Steps", style=discord.TextStyle.paragraph, placeholder="Explain carefully what happened...", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
+        # 1. Instantly defer so the user's client never hangs or times out
         await interaction.response.defer(ephemeral=True)
-        target_channel = discord.utils.get(interaction.guild.text_channels, name="report-here") or interaction.channel
         
-        embed = discord.Embed(title="🛡️ Integrity Operations Center", description="A new system bug has been registered.", color=discord.Color.red())
+        # 2. Build the standard error report embed
+        embed = discord.Embed(title="🛡️ Integrity Operations Center", description="A new global system bug has been registered.", color=discord.Color.red())
         embed.add_field(name="🐛 System Target", value=f"`{self.bug_title.value}`", inline=False)
         embed.add_field(name="📝 Defect Log Payload", value=self.details.value, inline=False)
         embed.set_footer(text=f"Report Submitter: {interaction.user.name} | ID: {interaction.user.id}")
 
-        await target_channel.send(embed=embed, view=BugReportDisplayView())
-        await interaction.followup.send("✅ **System Log Transmitted!** Forwarded to the developer panel.", ephemeral=True)
+        # 3. Securely route directly to the Bot Owner's private DMs
+        try:
+            owner = await interaction.client.fetch_user(OWNER_DISCORD_ID)
+            await owner.send(embed=embed, view=BugReportDisplayView())
+            await interaction.followup.send("✅ **System Log Transmitted!** Forwarded directly to the developer's private inbox.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"⚠️ Report processed internally, but couldn't route DM to developer: `{str(e)}`", ephemeral=True)
 
 class BugReportDisplayView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
@@ -308,18 +316,14 @@ class Tickets(commands.Cog):
             keep_alive.LIVE_STATS["processed"] = processed_cases_counter
         except Exception: pass
 
-    # --- FIX: ROBUST COLOR HANDLING WITH AUTOMATIC FORMATTING ---
     @app_commands.command(name="setticketrolecolor", description="🎨 Higher Rank Only: Alter a role's color configuration.")
     @app_commands.describe(role="The server role profile to alter", hex_code="The color value (e.g. #FF5555, 0xFF5555, or integer)")
     async def set_role_color(self, interaction: discord.Interaction, role: discord.Role, hex_code: str):
-        # 1. Check authorization before anything else
         if not is_authorized_staff(interaction):
             return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
         
-        # 2. Defer immediately to secure the 3-second gateway timeout
         await interaction.response.defer(ephemeral=True)
         
-        # 3. Format strings gracefully to protect native parsing routines
         input_string = hex_code.strip()
         if not input_string.startswith("#") and not input_string.lower().startswith("0x") and len(input_string) == 6:
             input_string = f"#{input_string}"
@@ -329,7 +333,6 @@ class Tickets(commands.Cog):
         except Exception:
             return await interaction.followup.send(f"❌ **Format Error:** `{hex_code}` is an invalid color code. Try using something like `#FF5555`.", ephemeral=True)
 
-        # 4. Modify role properties securely
         try:
             await role.edit(color=new_color, reason=f"Color change executed by: {interaction.user.name}")
             embed = discord.Embed(
@@ -343,7 +346,6 @@ class Tickets(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"❌ **Internal System Issue:** `{str(e)}`", ephemeral=True)
 
-    # --- TICKET CONTROL COMMANDS ---
     @app_commands.command(name="add", description="👤 Higher Rank Only: Grant ticket room visibility overrides.")
     async def add_command(self, interaction: discord.Interaction, user: discord.Member):
         if not is_authorized_staff(interaction): 
@@ -429,14 +431,11 @@ class Tickets(commands.Cog):
         await channel.send(embed=discord.Embed(title="⚖️ Appeal Desk", description="Click below to request an account review.", color=discord.Color.blue()), view=AppealButtonView())
         await interaction.followup.send("✅ Deployed layout to the target channel!", ephemeral=True)
 
-    # --- FIX: DEFER PLACED ON LINE 1 TO ELIMINATE TIMEOUTS ---
     @app_commands.command(name="adduibugreports", description="👑 OWNER ONLY: Deploy bug tracking system layout.")
     async def add_ui_bugs(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        # 1. Owner protection check
         if interaction.user.name != OWNER_USERNAME:
             return await interaction.response.send_message("❌ **Strict Access Denied: Locked to Bot Owner Only.**", ephemeral=True)
         
-        # 2. Defer instantly so the gateway never drops during message compilation
         await interaction.response.defer(ephemeral=True)
         
         try:
@@ -448,7 +447,7 @@ class Tickets(commands.Cog):
                 ), 
                 view=GeneralBugDeployView()
             )
-            await interaction.followup.send("✅ Bug interface deployed successfully!", ephemeral=True)
+            await interaction.followup.send(f"✅ Bug interface successfully deployed to {channel.mention}!", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ **Failed to deploy component layout:** `{str(e)}`", ephemeral=True)
 
