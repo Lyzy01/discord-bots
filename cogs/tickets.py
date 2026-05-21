@@ -308,12 +308,15 @@ class Tickets(commands.Cog):
             keep_alive.LIVE_STATS["processed"] = processed_cases_counter
         except Exception: pass
 
-    # --- SET TICKET ROLE COLOR COMMAND ---
+    # --- FIX: ROBUST SET TICKET ROLE COLOR COMMAND ---
     @app_commands.command(name="setticketrolecolor", description="🎨 Higher Rank Only: Alter a role's hex color code.")
     @app_commands.describe(role="The server role profile to alter", hex_code="The new Color Hex value (e.g. #FF5555)")
     async def set_role_color(self, interaction: discord.Interaction, role: discord.Role, hex_code: str):
+        # 1. Instant check for roles so unauthorized access drops quickly
         if not is_authorized_staff(interaction):
             return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
+        
+        # 2. Defer immediately to stop the 3-second timeout limit
         await interaction.response.defer(ephemeral=True)
         
         clean_hex = hex_code.replace("#", "").strip()
@@ -325,10 +328,16 @@ class Tickets(commands.Cog):
 
         try:
             await role.edit(color=new_color, reason=f"Color update by {interaction.user.name}")
-            embed = discord.Embed(title="🎨 Updated", description=f"Altered color profile for: {role.mention}.\n**New Hex:** `{hex_code.upper()}`", color=new_color)
+            embed = discord.Embed(
+                title="🎨 Color Updated Successfully", 
+                description=f"Altered color profile for: {role.mention}.\n**New Hex Applied:** `{hex_code.upper()}`", 
+                color=new_color
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
         except discord.Forbidden:
-            await interaction.followup.send("❌ **Hierarchy Error:** This role is positioned higher than the bot's own role.", ephemeral=True)
+            await interaction.followup.send("❌ **Hierarchy Error:** This role is positioned higher than the bot's highest role profile. Move the bot's role up in your Server Settings.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ **Internal System Issue:** `{str(e)}`", ephemeral=True)
 
     # --- TICKET CONTROL COMMANDS ---
     @app_commands.command(name="add", description="👤 Higher Rank Only: Grant ticket room visibility overrides.")
