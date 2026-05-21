@@ -52,28 +52,37 @@ async def on_ready():
     except Exception as e:
         logger.error(f"❌ TREE SYNC CRASHED: {e}")
 
-# 🚨 EMERGENCY TEXT PASS-THROUGH COMMAND (FIXED STRING FORMATTING) 🚨
+# 🚨 EMERGENCY TEXT PASS-THROUGH COMMAND (SUPER SHORT) 🚨
 @bot.command(name="check")
 async def emergency_check(ctx):
     if ctx.author.name not in ["lyzy01", "kimmendez01"]:
         return
-
     full_logs = log_capture_buffer.getvalue()
-    recent_lines = full_logs.split('\n')[-15:]
-    clean_output = '\n'.join(recent_lines)
-    
+    clean_output = '\n'.join(full_logs.split('\n')[-15:])
     try:
-        await ctx.author.send(f"📋 **Emergency Diagnostics:**\n```text\n{clean_output}\n```")
+        await ctx.author.send(f"📋 **Logs:**\n```text\n{clean_output}\n```")
         await ctx.message.add_reaction("📨")
+    except:
+        await ctx.send("❌ Cannot DM logs.")
+
+@bot.command(name="sync")
+async def manual_sync(ctx):
+    if ctx.author.name not in ["lyzy01", "kimmendez01"]:
+        return await ctx.send("❌ Access Denied.")
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"✅ Manually forced synchronization of {len(synced)} slash commands!")
     except Exception as e:
-        # Keep everything on a single safe text string line to avoid Python parser crashes
-        await ctx.send(f"⚠️ Cannot DM logs. Snippet: 
-http://googleusercontent.com/immersive_entry_chip/0
+        await ctx.send(f"❌ Force sync failed: {e}")
 
----
+@tasks.loop(seconds=10)
+async def change_status():
+    await bot.change_presence(activity=discord.Game(next(status_rotation)))
 
-### 🚀 Save and Verify
+async def main():
+    keep_alive()
+    await bot.start(os.getenv("DISCORD_TOKEN"))
 
-1. Update **`bot.py`** with this version on GitHub and commit changes.
-2. Watch your Render dashboard. The logs will read `==> Build successful 🎉` and then run smoothly without hitting the syntax error.
-3. Once Render shows your deployment as active, go to Discord and run your slash menu or type **`!sync`** if your client needs an immediate update. Your `/uptime` command will finally show up!
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
