@@ -5,7 +5,7 @@ import time
 import datetime
 import os
 import sys
-import httpx  # Used for the live Groq API status handshake
+import urllib.request  # Native Python library - will never cause an installation crash!
 
 try:
     import resource
@@ -53,24 +53,25 @@ class Status(commands.Cog):
         # ⚙️ Python Environment Data
         python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
 
-        # 🟢/🔴 LIVE API HEALTH CHECK (Groq Handshake)
+        # 🟢/🔴 LIVE API HEALTH CHECK (Native Handshake)
         groq_api_key = os.getenv("GROQ_API_KEY")
         if not groq_api_key:
             ai_status = "🔴 UNCONFIGURED"
         else:
-            try:
-                # Send a lightweight test ping to Groq's official endpoint
-                async with httpx.AsyncClient() as client:
-                    response = await client.get("https://api.groq.com/openai/v1/models", headers={
-                        "Authorization": f"Bearer {groq_api_key}"
-                    }, timeout=3.0)
-                
-                if response.status_code == 200:
-                    ai_status = "🟢 OPERATIONAL"
-                else:
-                    ai_status = f"🔴 ERROR {response.status_code}"
-            except Exception:
-                ai_status = "🔴 TIMEOUT / DOWN"
+            # Run the handshake inside an executor thread so it doesn't freeze the bot
+            def check_groq():
+                try:
+                    req = urllib.request.Request(
+                        "https://api.groq.com/openai/v1/models",
+                        headers={"Authorization": f"Bearer {groq_api_key}"},
+                        method="GET"
+                    )
+                    with urllib.request.urlopen(req, timeout=3.0) as response:
+                        return "🟢 OPERATIONAL" if response.status == 200 else f"🔴 ERROR {response.status}"
+                except Exception:
+                    return "🔴 TIMEOUT / DOWN"
+
+            ai_status = await self.bot.loop.run_in_executor(None, check_groq)
 
         # 🎨 Advanced Clean Dashboard Embed
         embed = discord.Embed(
@@ -78,10 +79,9 @@ class Status(commands.Cog):
             color=discord.Color.from_rgb(46, 204, 113) # Matrix Emerald Green
         )
         
-        # Your status indicator highlights added right at the top!
         embed.add_field(
             name="🌐 INSTANCE DEPLOYMENT STATUS",
-            value=f">>> 🟢 **Render Host Process:** `LIVE / STABLE`\n{ai_status} **Groq AI Framework Pipeline**",
+            value=f"> 🟢 **Render Host Process:** `LIVE / STABLE`\n> {ai_status} **Groq AI Framework Pipeline**",
             inline=False
         )
         
@@ -92,6 +92,5 @@ http://googleusercontent.com/immersive_entry_chip/0
 http://googleusercontent.com/immersive_entry_chip/1
 http://googleusercontent.com/immersive_entry_chip/2
 http://googleusercontent.com/immersive_entry_chip/3
-4. Give your client a quick reboot (`Ctrl + R`).
 
-Now when you trigger `/uptime`, you'll get a beautifully formatted, emerald-themed breakdown showing the exact health circles of your hosting infrastructure and your active AI connection!
+Do a quick app restart (`Ctrl + R`), and your shiny new metrics dashboard will be back in place permanently!
