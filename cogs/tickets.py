@@ -333,24 +333,36 @@ class Tickets(commands.Cog):
     # --- TICKET CONTROL COMMANDS ---
     @app_commands.command(name="add", description="👤 Higher Rank Only: Grant ticket room visibility overrides.")
     async def add_command(self, interaction: discord.Interaction, user: discord.Member):
-        if not is_authorized_staff(interaction): return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
-        if not is_ticket_channel(interaction.channel.name): return await interaction.response.send_message("❌ Not a ticket channel.", ephemeral=True)
+        if not is_authorized_staff(interaction): 
+            return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
+        if not is_ticket_channel(interaction.channel.name): 
+            return await interaction.response.send_message("❌ Not a ticket channel.", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
         await interaction.channel.set_permissions(user, read_messages=True, send_messages=True, view_channel=True)
-        await interaction.response.send_message(embed=discord.Embed(title="👤 Access Expanded", description=f"Added {user.mention}.", color=discord.Color.blue()))
+        await interaction.followup.send(embed=discord.Embed(title="👤 Access Expanded", description=f"Added {user.mention}.", color=discord.Color.blue()), ephemeral=True)
 
     @app_commands.command(name="remove", description="🚪 Higher Rank Only: Strip visibility overrides.")
     async def remove_command(self, interaction: discord.Interaction, user: discord.Member):
-        if not is_authorized_staff(interaction): return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
-        if not is_ticket_channel(interaction.channel.name): return await interaction.response.send_message("❌ Not a ticket channel.", ephemeral=True)
+        if not is_authorized_staff(interaction): 
+            return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
+        if not is_ticket_channel(interaction.channel.name): 
+            return await interaction.response.send_message("❌ Not a ticket channel.", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
         await interaction.channel.set_permissions(user, overwrite=None)
-        await interaction.response.send_message(embed=discord.Embed(title="🚪 Access Revoked", description=f"Removed {user.mention}.", color=discord.Color.orange()))
+        await interaction.followup.send(embed=discord.Embed(title="🚪 Access Revoked", description=f"Removed {user.mention}.", color=discord.Color.orange()), ephemeral=True)
 
     @app_commands.command(name="claim", description="🔒 Higher Rank Only: Assign this specific ticket.")
     async def claim_command(self, interaction: discord.Interaction):
-        if not is_authorized_staff(interaction): return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
-        if not is_ticket_channel(interaction.channel.name): return await interaction.response.send_message("❌ Not a ticket channel.", ephemeral=True)
+        if not is_authorized_staff(interaction): 
+            return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
+        if not is_ticket_channel(interaction.channel.name): 
+            return await interaction.response.send_message("❌ Not a ticket channel.", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=False)
         await interaction.channel.edit(topic=f"Case handled by: {interaction.user.name}")
-        await interaction.response.send_message(embed=discord.Embed(title="🔒 Claimed", description=f"Assigned to {interaction.user.mention}.", color=discord.Color.green()))
+        await interaction.followup.send(embed=discord.Embed(title="🔒 Claimed", description=f"Assigned to {interaction.user.mention}.", color=discord.Color.green()))
 
     @app_commands.command(name="transcript", description="📑 Higher Rank Only: Compile room message histories.")
     async def transcript_command(self, interaction: discord.Interaction):
@@ -388,21 +400,28 @@ class Tickets(commands.Cog):
 
     @app_commands.command(name="adduiplayerreport", description="Deploy incident reporting layout center")
     async def add_ui_report(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if not is_authorized_staff(interaction): return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
+        if not is_authorized_staff(interaction): 
+            return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
         await channel.send(embed=discord.Embed(title="🛡️ Integrity Center", description="Click below to report a rule-breaker.", color=discord.Color.red()), view=ReportButtonView())
-        await interaction.response.send_message("✅ Deployed!", ephemeral=True)
+        await interaction.followup.send("✅ Deployed layout to the target channel!", ephemeral=True)
 
     @app_commands.command(name="adduiappealban", description="Deploy custom account appeal desk")
     async def add_ui_appeal(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if not is_authorized_staff(interaction): return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
+        if not is_authorized_staff(interaction): 
+            return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
         await channel.send(embed=discord.Embed(title="⚖️ Appeal Desk", description="Click below to request an account review.", color=discord.Color.blue()), view=AppealButtonView())
-        await interaction.response.send_message("✅ Deployed!", ephemeral=True)
+        await interaction.followup.send("✅ Deployed layout to the target channel!", ephemeral=True)
 
     # --- OWNER-ONLY BUG UI DEPLOY ---
     @app_commands.command(name="adduibugreports", description="👑 OWNER ONLY: Deploy bug tracking system layout.")
     async def add_ui_bugs(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if interaction.user.name != OWNER_USERNAME:
             return await interaction.response.send_message("❌ **Strict Access Denied: Locked to Bot Owner Only.**", ephemeral=True)
+        
         await interaction.response.defer(ephemeral=True)
         await channel.send(embed=discord.Embed(title="🐛 Bug Tracking Center", description="Click below to report bot glitches directly to the developer.", color=discord.Color.dark_grey()), view=GeneralBugDeployView())
         await interaction.followup.send("✅ Bug interface deployed!", ephemeral=True)
