@@ -28,30 +28,17 @@ class Leveling(commands.Cog):
 
     def get_title(self, guild_id, level):
         guild_id = str(guild_id)
-        
-        # Check if the guild has custom renamed titles stored in the JSON
         if guild_id in self.data and "custom_titles" in self.data[guild_id]:
-            # Sort milestones in descending order to match the highest reached tier
-            sorted_milestones = sorted(
-                [int(k) for k in self.data[guild_id]["custom_titles"].keys()], 
-                reverse=True
-            )
+            sorted_milestones = sorted([int(k) for k in self.data[guild_id]["custom_titles"].keys()], reverse=True)
             for milestone in sorted_milestones:
                 if level >= milestone:
                     return self.data[guild_id]["custom_titles"][str(milestone)]
 
-        # --- Fallback Default Terminal Titles ---
-        if level >= 10000: return "👑 [ Level 10K: Singularity Overlord ]"
-        if level >= 7500:  return "🌌 [ Level 7.5K: Cosmic Architect ]"
-        if level >= 5000:  return "🧠 [ Level 5K: Mainframe Overlord ]"
-        if level >= 2500:  return "🔮 [ Level 2.5K: Cyber Necromancer ]"
-        if level >= 1000:  return "💾 [ Level 1K: Data Warden ]"
-        if level >= 500:   return "🛡️ [ Level 500: System Vanguard ]"
-        if level >= 100:   return "⚡ [ Level 100: Netrunner Elite ]"
-        if level >= 50:    return "💻 [ Level 50: Root Admin ]"
-        if level >= 20:    return "🛠️ [ Level 20: Elite Dev ]"
-        if level >= 5:     return "📝 [ Level 5: Novice Coder ]"
-        return "🌱 [ Level 0: Script Kiddie ]"
+        if level >= 10000: return "👑 [ Singularity Overlord ]"
+        if level >= 5000:  return "🧠 [ Mainframe Overlord ]"
+        if level >= 1000:  return "💾 [ Data Warden ]"
+        if level >= 100:   return "⚡ [ Netrunner Elite ]"
+        return "🌱 [ Script Kiddie ]"
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -62,21 +49,14 @@ class Leveling(commands.Cog):
         user_id = str(message.author.id)
 
         if guild_id not in self.data:
-            self.data[guild_id] = {}
-
+            self.data[guild_id] = {"users": {}, "custom_titles": {}}
         if "users" not in self.data[guild_id]:
-            # Move existing users nesting if upgrading from previous json format
-            if user_id in self.data[guild_id] or len(self.data[guild_id]) == 0:
-                old_data = self.data[guild_id].copy()
-                self.data[guild_id] = {"users": old_data, "custom_titles": {}}
-            else:
-                self.data[guild_id]["users"] = {}
+            self.data[guild_id]["users"] = {}
 
         if user_id not in self.data[guild_id]["users"]:
             self.data[guild_id]["users"][user_id] = {"xp": 0, "level": 0}
 
         user_profile = self.data[guild_id]["users"][user_id]
-        
         if user_profile["level"] >= MAX_LEVEL:
             return
 
@@ -89,7 +69,6 @@ class Leveling(commands.Cog):
             current_xp -= next_lvl_xp
             current_lvl += 1
             next_lvl_xp = (current_lvl + 1) * 100
-            
             user_profile["level"] = current_lvl
             user_profile["xp"] = current_xp
 
@@ -98,14 +77,11 @@ class Leveling(commands.Cog):
             except discord.Forbidden:
                 pass
 
-        if user_profile["level"] >= MAX_LEVEL:
-            user_profile["level"] = MAX_LEVEL
-            user_profile["xp"] = 0
-
         self.save_data()
 
-    @app_commands.command(name="profile", description="Displays your server level and terminal network status.")
-    async def profile(self, interaction: discord.Interaction, member: discord.Member = None):
+    # --- Cool Framework /level Command ---
+    @app_commands.command(name="level", description="Displays your current server level and rank profile.")
+    async def level_command(self, interaction: discord.Interaction, member: discord.Member = None):
         member = member or interaction.user
         guild_id = str(interaction.guild.id)
         user_id = str(member.id)
@@ -119,42 +95,56 @@ class Leveling(commands.Cog):
 
         title = self.get_title(guild_id, level)
         
+        # Progress Bar Math
         if level >= MAX_LEVEL:
             progress_bar = "██████████"
-            xp_display = "MAX LEVEL REACHED"
+            xp_display = "MAX LEVEL"
         else:
             next_lvl_xp = (level + 1) * 100
-            progress_segments = 10
-            filled_segments = math.floor((xp / next_lvl_xp) * progress_segments)
-            filled_segments = max(0, min(progress_segments, filled_segments))
-            progress_bar = "█" * filled_segments + "░" * (progress_segments - filled_segments)
-            xp_display = f"{xp}/{next_lvl_xp} XP"
+            filled = math.floor((xp / next_lvl_xp) * 10)
+            filled = max(0, min(10, filled))
+            progress_bar = "█" * filled + "░" * (10 - filled)
+            xp_display = f"{xp:,} / {next_lvl_xp:,} XP"
 
-        terminal_card = (
-            f"```ansi\n"
-            f"\u001b[1;36m[ TERMINAL ID: {member.name.upper()} ]\u001b[0m\n"
-            f"----------------------------------------\n"
-            f"» STATUS:     {title}\n"
-            f"» NODE LEVEL: {level:,} / {MAX_LEVEL:,}\n"
-            f"» DATA SYNC:  [{progress_bar}] {xp_display}\n"
-            f"----------------------------------------\n"
-            f"```"
+        # Framework Layout Output
+        framework = (
+            f"╔══════════════════════════════════╗\n"
+            f"   👤 **USER DATA LINK:** {member.name.upper()}\n"
+            f"╚══════════════════════════════════╝\n"
+            f"> 🏆 **RANK STATUS:** `{title}`\n"
+            f"> 📈 **NODE LEVEL:** `Lvl {level:,} / {MAX_LEVEL:,}`\n"
+            f"> 📊 **SYNC PROGRESS:** `[{progress_bar}]` *({xp_display})*\n"
+            f"────────────────────────────────────"
         )
+        await interaction.response.send_message(framework)
 
-        await interaction.response.send_message(terminal_card)
+    # Legacy profile command pointing to the exact same logic
+    @app_commands.command(name="profile", description="Displays your server level status.")
+    async def profile(self, interaction: discord.Interaction, member: discord.Member = None):
+        await self.level_command(interaction, member)
 
-    @app_commands.command(name="renamelevel", description="Sets a custom rank title for a specific level milestone.")
+    @app_commands.command(name="renamelevel", description="Sets a custom rank title for a level milestone.")
     @app_commands.default_permissions(manage_guild=True)
     async def rename_level(self, interaction: discord.Interaction, level: int, new_title: str):
         guild_id = str(interaction.guild.id)
 
-        # Higher ranks permission check fallback (Manage Server or Guild Owner)
         if not interaction.user.guild_permissions.manage_guild and interaction.user.id != interaction.guild.owner_id:
-            await interaction.response.send_message(
-                "
-http://googleusercontent.com/immersive_entry_chip/0
+            await interaction.response.send_message("❌ Error: Access denied.", ephemeral=True)
+            return
 
-### What changed?
-1. **The `/renamelevel` Command:** Added with arguments for `level` (e.g., `5`) and `new_title` (e.g., `⚙️ [ Level 5: System Intern ]`).
-2. **Strict Admin Restriction:** Protected by both Discord's app command middleware (`@app_commands.default_permissions`) and an explicit back-end check verifying that only the Server Owner or Admins with **Manage Server** rights can write to the JSON file.
-3. **Structured Database Integration:** The `levels.json` file splits user progression points and server configuration parameters cleanly into separate structures (`users` and `custom_titles`) to avoid conflicts.
+        if level < 0 or level > MAX_LEVEL:
+            await interaction.response.send_message(f"❌ Error: Level must be between 0 and {MAX_LEVEL}.", ephemeral=True)
+            return
+
+        if guild_id not in self.data:
+            self.data[guild_id] = {"users": {}, "custom_titles": {}}
+        if "custom_titles" not in self.data[guild_id]:
+            self.data[guild_id]["custom_titles"] = {}
+
+        self.data[guild_id]["custom_titles"][str(level)] = new_title
+        self.save_data()
+
+        await interaction.response.send_message(f"✅ Success! Level {level} milestone has been renamed to: **{new_title}**")
+
+async def setup(bot):
+    await bot.add_cog(Leveling(bot))
