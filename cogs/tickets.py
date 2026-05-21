@@ -181,17 +181,42 @@ class StaffControlPanel(discord.ui.View):
 # INTERACTIVE SYSTEMS & MODALS
 # =================================================================
 class BugReportModal(discord.ui.Modal, title="Report Bugs & Errors"):
-    bug_title = discord.ui.TextInput(label="Command or Feature Affected", placeholder="e.g., /ai or leveling progression", required=True)
-    details = discord.ui.TextInput(label="Error Details / Reproduction Steps", style=discord.TextStyle.paragraph, placeholder="Explain carefully what happened...", required=True)
+    bug_title = discord.ui.TextInput(
+        label="Command or Feature Affected", 
+        placeholder="e.g., /ai or leveling progression", 
+        required=True
+    )
+    details = discord.ui.TextInput(
+        label="Error Details / Reproduction Steps", 
+        style=discord.TextStyle.paragraph, 
+        placeholder="Explain carefully what happened...", 
+        required=True
+    )
+    # New completely optional Feedback/Suggestions choice area
+    feedback = discord.ui.TextInput(
+        label="Additional Feedback / Suggestions (Optional)", 
+        style=discord.TextStyle.paragraph, 
+        placeholder="Type any extra feedback or choices you'd like to share...", 
+        required=False
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
         # 1. Instantly defer so the user's client never hangs or times out
         await interaction.response.defer(ephemeral=True)
         
         # 2. Build the standard error report embed
-        embed = discord.Embed(title="🛡️ Integrity Operations Center", description="A new global system bug has been registered.", color=discord.Color.red())
+        embed = discord.Embed(
+            title="🛡️ Integrity Operations Center", 
+            description="A new global system bug or feedback payload has been registered.", 
+            color=discord.Color.red()
+        )
         embed.add_field(name="🐛 System Target", value=f"`{self.bug_title.value}`", inline=False)
         embed.add_field(name="📝 Defect Log Payload", value=self.details.value, inline=False)
+        
+        # Check if the user filled out the optional feedback choice field
+        feedback_value = self.feedback.value.strip() if self.feedback.value else "None provided."
+        embed.add_field(name="💬 User Feedback / Choices", value=feedback_value, inline=False)
+        
         embed.set_footer(text=f"Report Submitter: {interaction.user.name} | ID: {interaction.user.id}")
 
         # 3. Securely route directly to the Bot Owner's private DMs
