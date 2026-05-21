@@ -71,4 +71,8 @@ class AI(commands.Cog):
             await interaction.response.send_message("❌ I don't currently have any active conversation history saved for you!", ephemeral=True)
 
 async def setup(bot):
-    await bot.add_cog(AI(bot))
+    try:
+        await bot.add_cog(AI(bot))
+        print("📦 Successfully mounted cog module: ai.py")
+    except Exception as e:
+        print(f"⚠️ Warning: Encountered initialization bypass handling ai.py: {e}")
