@@ -5,7 +5,7 @@ import json
 import os
 import math
 
-DATA_FILE = "levels.json"
+DATA_FILE = "/data/levels.json"
 MAX_LEVEL = 10000
 
 class Leveling(commands.Cog):
@@ -15,6 +15,11 @@ class Leveling(commands.Cog):
 
     def load_data(self):
         if not os.path.exists(DATA_FILE):
+            # Fallback check for local vs disk volume setup
+            if os.path.exists("levels.json"):
+                with open("levels.json", "r") as f:
+                    try: return json.load(f)
+                    except: return {}
             return {}
         with open(DATA_FILE, "r") as f:
             try:
@@ -23,6 +28,8 @@ class Leveling(commands.Cog):
                 return {}
 
     def save_data(self):
+        # Ensure the directory exists before saving
+        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
         with open(DATA_FILE, "w") as f:
             json.dump(self.data, f, indent=4)
 
@@ -40,12 +47,10 @@ class Leveling(commands.Cog):
         if level >= 100:   return "⚡ [ Netrunner Elite ]"
         return "🌱 [ Script Kiddie ]"
 
-    # --- AUTOMATIC ROLE GENERATOR & ASSIGNER ---
     async def check_and_assign_role(self, member, level):
         guild = member.guild
         guild_id = str(guild.id)
         
-        # Default milestones
         milestones = [1, 5, 10, 20, 30, 40, 50, 100, 500, 1000]
         if level not in milestones:
             return
@@ -53,19 +58,19 @@ class Leveling(commands.Cog):
         role_name = f"Level {level}+"
         role = discord.utils.get(guild.roles, name=role_name)
         
-        # Check if an admin previously defined a custom hex color for this milestone
-        chosen_color = discord.Color.from_rgb(max(50, 255 - (level * 2)), min(200, 50 + (level * 2)), 230) # Default color
+        # Safe default color conversion
+        chosen_color = discord.Color.from_rgb(max(50, 255 - (level * 2)), min(200, 50 + (level * 2)), 230)
+        
         if guild_id in self.data and "role_colors" in self.data[guild_id]:
             hex_str = self.data[guild_id]["role_colors"].get(str(level))
             if hex_str:
                 try:
-                    # Strip '#' if present and convert hex to discord Color
-                    hex_clean = hex_str.lstrip('#')
-                    chosen_color = discord.Color(int(hex_clean, 16))
+                    if not hex_str.startswith("#"):
+                        hex_str = f"#{hex_str}"
+                    chosen_color = discord.Color.from_str(hex_str)
                 except ValueError:
                     pass
 
-        # If role doesn't exist, build it
         if role is None:
             try:
                 role = await guild.create_role(
@@ -74,15 +79,14 @@ class Leveling(commands.Cog):
                     reason="Automated Leveling Milestone System"
                 )
             except discord.Forbidden:
-                print(f"❌ Missing 'Manage Roles' permission to create: {role_name}")
+                print(f"❌ Missing permissions to create: {role_name}")
                 return
 
-        # Assign it
         if role and role not in member.roles:
             try:
                 await member.add_roles(role)
             except discord.Forbidden:
-                print(f"❌ Cannot assign role {role_name}. Ensure bot role is ranked higher.")
+                print(f"❌ Cannot assign role {role_name}.")
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -94,7 +98,6 @@ class Leveling(commands.Cog):
 
         if guild_id not in self.data:
             self.data[guild_id] = {"users": {}, "custom_titles": {}, "role_colors": {}}
-        
         if "users" not in self.data[guild_id]:
             self.data[guild_id]["users"] = {}
 
@@ -173,7 +176,7 @@ class Leveling(commands.Cog):
         embed = await self.generate_level_embed(interaction, member)
         await interaction.response.send_message(embed=embed)
 
-    # --- ADMIN/HIGHER RANK COLOR MODIFIER COMMAND ---
+    # --- CRASH FIXED COLOR COMMAND ---
     @app_commands.command(name="setrolecolor", description="Changes the color of an existing level milestone role.")
     @app_commands.describe(level="The level milestone (e.g., 1, 5, 10)", hex_color="The Hex color code (e.g., #FF5555 or 00FFCC)")
     @app_commands.default_permissions(manage_roles=True)
@@ -181,36 +184,33 @@ class Leveling(commands.Cog):
         guild = interaction.guild
         guild_id = str(guild.id)
 
-        # Secure parsing of hex string
-        clean_hex = hex_color.lstrip('#')
+        # Make sure hex string formatting satisfies format requirements
+        formatted_hex = hex_color if hex_color.startswith("#") else f"#{hex_color}"
         try:
-            resolved_color = discord.Color(int(clean_hex, 16))
+            resolved_color = discord.Color.from_str(formatted_hex)
         except ValueError:
             await interaction.response.send_message("❌ Error: Invalid Hex code format. Use formats like `#FF5555` or `00FFCC`.", ephemeral=True)
             return
 
-        # Check if database components exist
         if guild_id not in self.data:
             self.data[guild_id] = {"users": {}, "custom_titles": {}, "role_colors": {}}
         if "role_colors" not in self.data[guild_id]:
             self.data[guild_id]["role_colors"] = {}
 
-        # Save to local state
-        self.data[guild_id]["role_colors"][str(level)] = f"#{clean_hex}"
+        self.data[guild_id]["role_colors"][str(level)] = formatted_hex
         self.save_data()
 
-        # Update the live role inside Discord if it already exists
         target_role_name = f"Level {level}+"
         existing_role = discord.utils.get(guild.roles, name=target_role_name)
         
         if existing_role:
             try:
                 await existing_role.edit(color=resolved_color, reason=f"Color modified via /setrolecolor by {interaction.user}")
-                await interaction.response.send_message(f"✅ Modified color for **{target_role_name}** to `#{clean_hex}` successfully across the server!")
+                await interaction.response.send_message(f"✅ Modified color for **{target_role_name}** to `{formatted_hex}` successfully across the server!")
             except discord.Forbidden:
                 await interaction.response.send_message("❌ Error: Bot position hierarchy is lower than the target level role. Drag the bot's role higher in Server Settings!", ephemeral=True)
         else:
-            await interaction.response.send_message(f"💾 Saved configuration! Next time a user updates to **Level {level}**, their new role will spawn with `#{clean_hex}`.")
+            await interaction.response.send_message(f"💾 Saved configuration! Next time a user updates to **Level {level}**, their new role will spawn with `{formatted_hex}`.")
 
     @app_commands.command(name="renamelevel", description="Sets a custom rank title for a level milestone.")
     @app_commands.default_permissions(manage_guild=True)
