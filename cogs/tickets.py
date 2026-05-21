@@ -308,34 +308,38 @@ class Tickets(commands.Cog):
             keep_alive.LIVE_STATS["processed"] = processed_cases_counter
         except Exception: pass
 
-    # --- FIX: ROBUST SET TICKET ROLE COLOR COMMAND ---
-    @app_commands.command(name="setticketrolecolor", description="🎨 Higher Rank Only: Alter a role's hex color code.")
-    @app_commands.describe(role="The server role profile to alter", hex_code="The new Color Hex value (e.g. #FF5555)")
+    # --- FIX: ROBUST COLOR HANDLING WITH AUTOMATIC FORMATTING ---
+    @app_commands.command(name="setticketrolecolor", description="🎨 Higher Rank Only: Alter a role's color configuration.")
+    @app_commands.describe(role="The server role profile to alter", hex_code="The color value (e.g. #FF5555, 0xFF5555, or integer)")
     async def set_role_color(self, interaction: discord.Interaction, role: discord.Role, hex_code: str):
-        # 1. Instant check for roles so unauthorized access drops quickly
+        # 1. Check authorization before anything else
         if not is_authorized_staff(interaction):
             return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
         
-        # 2. Defer immediately to stop the 3-second timeout limit
+        # 2. Defer immediately to secure the 3-second gateway timeout
         await interaction.response.defer(ephemeral=True)
         
-        clean_hex = hex_code.replace("#", "").strip()
-        try:
-            rgb_color = tuple(int(clean_hex[i:i+2], 16) for i in (0, 2, 4))
-            new_color = discord.Color.from_rgb(*rgb_color)
-        except Exception:
-            return await interaction.followup.send("❌ **Format Error:** Invalid Hex Code. Use format like `#FF5555`.", ephemeral=True)
+        # 3. Format strings gracefully to protect native parsing routines
+        input_string = hex_code.strip()
+        if not input_string.startswith("#") and not input_string.lower().startswith("0x") and len(input_string) == 6:
+            input_string = f"#{input_string}"
 
         try:
-            await role.edit(color=new_color, reason=f"Color update by {interaction.user.name}")
+            new_color = discord.Color.from_str(input_string)
+        except Exception:
+            return await interaction.followup.send(f"❌ **Format Error:** `{hex_code}` is an invalid color code. Try using something like `#FF5555`.", ephemeral=True)
+
+        # 4. Modify role properties securely
+        try:
+            await role.edit(color=new_color, reason=f"Color change executed by: {interaction.user.name}")
             embed = discord.Embed(
-                title="🎨 Color Updated Successfully", 
-                description=f"Altered color profile for: {role.mention}.\n**New Hex Applied:** `{hex_code.upper()}`", 
+                title="🎨 Color Applied Successfully", 
+                description=f"Altered color profile for role: {role.mention}.\n**New Color:** `{input_string.upper()}`", 
                 color=new_color
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
         except discord.Forbidden:
-            await interaction.followup.send("❌ **Hierarchy Error:** This role is positioned higher than the bot's highest role profile. Move the bot's role up in your Server Settings.", ephemeral=True)
+            await interaction.followup.send("❌ **Hierarchy Error:** This role is higher than the bot's highest role. Move the bot's role up in your Server Settings.", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ **Internal System Issue:** `{str(e)}`", ephemeral=True)
 
@@ -425,15 +429,28 @@ class Tickets(commands.Cog):
         await channel.send(embed=discord.Embed(title="⚖️ Appeal Desk", description="Click below to request an account review.", color=discord.Color.blue()), view=AppealButtonView())
         await interaction.followup.send("✅ Deployed layout to the target channel!", ephemeral=True)
 
-    # --- OWNER-ONLY BUG UI DEPLOY ---
+    # --- FIX: DEFER PLACED ON LINE 1 TO ELIMINATE TIMEOUTS ---
     @app_commands.command(name="adduibugreports", description="👑 OWNER ONLY: Deploy bug tracking system layout.")
     async def add_ui_bugs(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        # 1. Owner protection check
         if interaction.user.name != OWNER_USERNAME:
             return await interaction.response.send_message("❌ **Strict Access Denied: Locked to Bot Owner Only.**", ephemeral=True)
         
+        # 2. Defer instantly so the gateway never drops during message compilation
         await interaction.response.defer(ephemeral=True)
-        await channel.send(embed=discord.Embed(title="🐛 Bug Tracking Center", description="Click below to report bot glitches directly to the developer.", color=discord.Color.dark_grey()), view=GeneralBugDeployView())
-        await interaction.followup.send("✅ Bug interface deployed!", ephemeral=True)
+        
+        try:
+            await channel.send(
+                embed=discord.Embed(
+                    title="🐛 Bug Tracking Center", 
+                    description="Click below to report bot glitches directly to the developer.", 
+                    color=discord.Color.dark_grey()
+                ), 
+                view=GeneralBugDeployView()
+            )
+            await interaction.followup.send("✅ Bug interface deployed successfully!", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ **Failed to deploy component layout:** `{str(e)}`", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Tickets(bot))
