@@ -14,6 +14,7 @@ OWNER_USERNAME = "kimmendez01"
 processed_cases_counter = 0
 
 def is_authorized_staff(interaction: discord.Interaction) -> bool:
+    """Returns True if user is the bot creator or possesses an elevated administrative role."""
     if interaction.user.name == OWNER_USERNAME:
         return True
     admin_keywords = ["admin", "moderator", "staff", "owner"]
@@ -110,7 +111,7 @@ class StaffControlPanel(discord.ui.View):
     async def approve_case(self, interaction: discord.Interaction, button: discord.ui.Button):
         global processed_cases_counter
         if not is_authorized_staff(interaction):
-            return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
+            return await interaction.response.send_message("❌ Access Denied: Requires a higher-rank Staff role.", ephemeral=True)
         
         await interaction.response.defer(ephemeral=True)
         self.parse_embed_data(interaction)
@@ -140,7 +141,7 @@ class StaffControlPanel(discord.ui.View):
     async def deny_case(self, interaction: discord.Interaction, button: discord.ui.Button):
         global processed_cases_counter
         if not is_authorized_staff(interaction):
-            return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
+            return await interaction.response.send_message("❌ Access Denied: Requires a higher-rank Staff role.", ephemeral=True)
         
         await interaction.response.defer(ephemeral=True)
         self.parse_embed_data(interaction)
@@ -169,7 +170,7 @@ class StaffControlPanel(discord.ui.View):
     @discord.ui.button(label="🔒 Cancel Session", style=discord.ButtonStyle.secondary, custom_id="panel_cancel_session")
     async def cancel_session(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_authorized_staff(interaction):
-            return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
+            return await interaction.response.send_message("❌ Access Denied: Requires a higher-rank Staff role.", ephemeral=True)
         
         await interaction.response.defer(ephemeral=True)
         self.parse_embed_data(interaction)
@@ -194,10 +195,9 @@ class BugReportModal(discord.ui.Modal, title="Report Bugs & Errors"):
         guild = interaction.guild
         user = interaction.user
 
-        # Look for the #report-here tracking corridor channel
         target_channel = discord.utils.get(guild.text_channels, name="report-here")
         if not target_channel:
-            target_channel = interaction.channel # Fallback if channel search delays
+            target_channel = interaction.channel
 
         embed = discord.Embed(
             title="🛡️ Integrity Operations Center",
@@ -222,7 +222,7 @@ class BugReportDisplayView(discord.ui.View):
         pass
 
 # =================================================================
-# POP-UP MODALS WITH SECURED STAFF-ONLY AI CHANNELS
+# PUBLIC POP-UP MODALS 
 # =================================================================
 class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
     username = discord.ui.TextInput(label="Target Player Account", placeholder="Username of the rule-breaker", required=True)
@@ -419,10 +419,46 @@ class Tickets(commands.Cog):
         except Exception as e:
             print(f"Metrics Sync Error: {e}")
 
-    # --- ADD COMMAND ---
-    @app_commands.command(name="add", description="👤 Grant visibility access overrides to a user.")
+    # --- SET ROLE COLOR COMMAND (FIXED & FULLY FUNCTIONAL) ---
+    @app_commands.command(name="setrolecolor", description="🎨 Higher Rank Only: Alter the display hexadecimal color hex code profile of a target role.")
+    @app_commands.describe(role="The server role profile to alter", hex_code="The new Color Hex value (e.g. #FF5555 or 00FF00)")
+    async def set_role_color(self, interaction: discord.Interaction, role: discord.Role, hex_code: str):
+        # Restriction Check: Only Staff/Higher Ranks can run this moderation command
+        if not is_authorized_staff(interaction):
+            return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
+            
+        await interaction.response.defer(ephemeral=True)
+        
+        # Clean up the hex code string payload input formatting
+        clean_hex = hex_code.replace("#", "").strip()
+        
+        try:
+            # Convert hex string data structure directly into a discord integer tuple color
+            rgb_color = tuple(int(clean_hex[i:i+2], 16) for i in (0, 2, 4))
+            new_color = discord.Color.from_rgb(*rgb_color)
+        except Exception:
+            return await interaction.followup.send("❌ **Format Error:** Invalid Hex Code entry found. Please supply data mirroring format patterns like `#FF5555` or `00AAFF`.", ephemeral=True)
+
+        try:
+            await role.edit(color=new_color, reason=f"Color update requested by {interaction.user.name}")
+            
+            embed = discord.Embed(
+                title="🎨 System Database Updated", 
+                description=f"Successfully edited structural properties for configuration role profile: {role.mention}.\n**New Hex Profile:** `{hex_code.upper()}`", 
+                color=new_color
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ **Hierarchy Error:** The bot cannot update that specific role configuration layout because it resides higher up in structural hierarchy lists than the bot's role profile.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ An error occurred trying to save details: `{e}`", ephemeral=True)
+
+    # --- ADD ACCESS OVERRIDE COMMAND ---
+    @app_commands.command(name="add", description="👤 Higher Rank Only: Grant ticket room visibility overrides directly to a member.")
     @app_commands.describe(user="The server member to invite into this ticket room")
     async def add_command(self, interaction: discord.Interaction, user: discord.Member):
+        if not is_authorized_staff(interaction):
+            return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
         if not is_ticket_channel(interaction.channel.name):
             return await interaction.response.send_message("❌ This command can only be used inside an active ticket room.", ephemeral=True)
         
@@ -430,10 +466,12 @@ class Tickets(commands.Cog):
         embed = discord.Embed(title="👤 Access Expanded", description=f"{interaction.user.mention} added {user.mention} to this channel.", color=discord.Color.blue())
         await interaction.response.send_message(embed=embed)
 
-    # --- REMOVE COMMAND ---
-    @app_commands.command(name="remove", description="🚪 Strip visibility overrides and evict a user from this ticket.")
+    # --- REMOVE ACCESS OVERRIDE COMMAND ---
+    @app_commands.command(name="remove", description="🚪 Higher Rank Only: Strip visibility overrides and evict a member from this ticket.")
     @app_commands.describe(user="The server member to remove")
     async def remove_command(self, interaction: discord.Interaction, user: discord.Member):
+        if not is_authorized_staff(interaction):
+            return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
         if not is_ticket_channel(interaction.channel.name):
             return await interaction.response.send_message("❌ This command can only be used inside an active ticket room.", ephemeral=True)
         
@@ -441,11 +479,11 @@ class Tickets(commands.Cog):
         embed = discord.Embed(title="🚪 Access Revoked", description=f"{interaction.user.mention} removed {user.mention} from this channel.", color=discord.Color.orange())
         await interaction.response.send_message(embed=embed)
 
-    # --- CLAIM COMMAND ---
-    @app_commands.command(name="claim", description="🔒 Staff Only: Assign this specific ticket corridor to your handling queue.")
+    # --- CLAIM CORRIDOR COMMAND ---
+    @app_commands.command(name="claim", description="🔒 Higher Rank Only: Assign this specific ticket corridor to your handling queue.")
     async def claim_command(self, interaction: discord.Interaction):
         if not is_authorized_staff(interaction):
-            return await interaction.response.send_message("❌ **Access Denied:** Lacks staff permissions.", ephemeral=True)
+            return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
         if not is_ticket_channel(interaction.channel.name):
             return await interaction.response.send_message("❌ This command can only be used inside an active ticket room.", ephemeral=True)
 
@@ -453,11 +491,11 @@ class Tickets(commands.Cog):
         embed = discord.Embed(title="🔒 Case Corridor Claimed", description=f"This ticket environment has been officially assigned to {interaction.user.mention}.", color=discord.Color.from_rgb(16, 185, 129))
         await interaction.response.send_message(embed=embed)
 
-    # --- TRANSCRIPT COMMAND ---
-    @app_commands.command(name="transcript", description="📑 Staff Only: Compile complete room message histories into an archive text log.")
+    # --- TRANSCRIPT GENERATOR COMMAND ---
+    @app_commands.command(name="transcript", description="📑 Higher Rank Only: Compile complete room message histories into an archive text log.")
     async def transcript_command(self, interaction: discord.Interaction):
         if not is_authorized_staff(interaction):
-            return await interaction.response.send_message("❌ **Access Denied:** Lacks staff permissions.", ephemeral=True)
+            return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
 
         await interaction.response.defer(ephemeral=False)
         log_header = f"=== ARCHIVE TRANSCRIPT FOR #{interaction.channel.name} ===\nExported: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n=========================================\n\n"
@@ -482,15 +520,14 @@ class Tickets(commands.Cog):
         else:
             await interaction.followup.send(content="⚠️ Transcript compiled successfully! (Tip: Create a `#staff-audit-logs` channel to auto-route):", file=discord_file)
 
-    # --- NEW OWNER COMMAND: REPLY BACK VIA BOT DM ---
-    @app_commands.command(name="addreportbugs", description="✉️ Owner Only: Securely transmit a direct message reply to a bug submitter.")
+    # --- REPLY VIA BOT DM COMMAND ---
+    @app_commands.command(name="addreportbugs", description="✉️ Higher Rank Only: Transmit a direct message reply panel response to a bug submitter.")
     @app_commands.describe(user_id="The long numerical Discord ID string of the target user", message="The resolution message to DM")
     async def add_report_bugs(self, interaction: discord.Interaction, user_id: str, message: str):
+        if not is_authorized_staff(interaction):
+            return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
+            
         await interaction.response.defer(ephemeral=True)
-        
-        # Strict user validation block
-        if interaction.user.name != OWNER_USERNAME:
-            return await interaction.followup.send("❌ **Access Denied:** Security signature mismatch. This command is restricted to the core owner.", ephemeral=True)
         
         try:
             target_id = int(user_id)
@@ -502,7 +539,6 @@ class Tickets(commands.Cog):
         except Exception:
             return await interaction.followup.send("❌ Error: Could not locate that user profile index on Discord.", ephemeral=True)
 
-        # Build official response DM notice
         dm_embed = discord.Embed(
             title="✉️ Official Core Developer Response",
             description=f"Hello **{target_user.name}**, you have received an action status update regarding your submitted bug report.",
@@ -517,32 +553,36 @@ class Tickets(commands.Cog):
         except discord.Forbidden:
             await interaction.followup.send(f"❌ Transmission Blocked: Unable to direct message {target_user.name} because their privacy blocks are enabled.", ephemeral=True)
 
-    # --- DEPLOYMENT UI COMMANDS ---
+    # --- DEPLOY PLAYER REPORT UI ---
     @app_commands.command(name="adduiplayerreport", description="Deploy the custom incident reporting layout center")
     @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_report(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if interaction.user.name != OWNER_USERNAME: 
-            return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
+        if not is_authorized_staff(interaction): 
+            return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title="🛡️ Integrity Operations Center", description="See someone breaking guidelines or using exploits? Click below to brief our staff agents.", color=discord.Color.dark_red())
         await channel.send(embed=embed, view=ReportButtonView())
         await interaction.followup.send("✅ Security interface deployed!", ephemeral=True)
 
+    # --- DEPLOY ENFORCEMENT APPEAL UI ---
     @app_commands.command(name="adduiappealban", description="Deploy the custom account restriction appeal desk")
     @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_appeal(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if interaction.user.name != OWNER_USERNAME: 
-            return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
+        if not is_authorized_staff(interaction): 
+            return await interaction.response.send_message("❌ **Access Denied:** Requires a higher-rank Staff role.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title="⚖️ Enforcement Appeal Operations", description="If an action was taken against your account in error, present your arguments below.", color=discord.Color.from_rgb(32, 34, 37))
         await channel.send(embed=embed, view=AppealButtonView())
         await interaction.followup.send("✅ Appeal interface deployed!", ephemeral=True)
 
-    @app_commands.command(name="adduibugreports", description="Deploy the general bug reporting button deck")
+    # --- OWNER-ONLY DEPLOY INTERFACE: BUG SYSTEM CENTER ---
+    @app_commands.command(name="adduibugreports", description="👑 OWNER ONLY: Deploy the general bug tracking interactive option module.")
     @app_commands.describe(channel="The target channel for the interface")
     async def add_ui_bugs(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        # STRICTOR PERMISSION LOCK: Only you can run this command
         if interaction.user.name != OWNER_USERNAME:
-            return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
+            return await interaction.response.send_message("❌ **Strict Access Denied:** This deployment setup script is locked exclusively to the core bot creator account.", ephemeral=True)
+            
         await interaction.response.defer(ephemeral=True)
         
         embed = discord.Embed(
@@ -551,7 +591,7 @@ class Tickets(commands.Cog):
             color=discord.Color.dark_gray()
         )
         await channel.send(embed=embed, view=GeneralBugDeployView())
-        await interaction.followup.send("✅ Bug reporting interaction center deployed!", ephemeral=True)
+        await interaction.followup.send("✅ Bug reporting interaction center deployed successfully!", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Tickets(bot))
