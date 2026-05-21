@@ -27,7 +27,7 @@ status_rotation = itertools.cycle([
     "👀 Watching over the server"
 ])
 
-# --- THE FIX: Proper Modern Cog Loading System ---
+# --- FIXED INDENTATION LOGIC ---
 @bot.event
 async def setup_hook():
     logger.info("📂 Scanning and mounting cog extensions...")
