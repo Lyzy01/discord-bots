@@ -183,6 +183,48 @@ class StaffControlPanel(discord.ui.View):
             print(f"Failed to delete channel: {e}")
 
 # =================================================================
+# BUG TICKETING ENGINE INTERACTION SYSTEM
+# =================================================================
+class BugReportModal(discord.ui.Modal, title="Report Bugs & Errors"):
+    bug_title = discord.ui.TextInput(label="Command or Feature Affected", placeholder="e.g., /ai or leveling progression", required=True)
+    details = discord.ui.TextInput(label="Error Details / Reproduction Steps", style=discord.TextStyle.paragraph, placeholder="Explain carefully what happened and what error it showed...", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        user = interaction.user
+
+        # Look for the #report-here text channel inside the server hierarchy
+        target_channel = discord.utils.get(guild.text_channels, name="report-here")
+        if not target_channel:
+            await interaction.followup.send("❌ Error: The `#report-here` tracking corridor cannot be found in this server.", ephemeral=True)
+            return
+
+        # Create the Red styled Operational UI card matching image 4 layout rules
+        embed = discord.Embed(
+            title="🛡️ Integrity Operations Center",
+            description="See someone breaking guidelines or using exploits? Click below to brief our staff agents.",
+            color=discord.Color.from_rgb(239, 68, 68) # Clean aesthetic red tint
+        )
+        embed.add_field(name="🐛 System Target", value=f"`{self.bug_title.value}`", inline=False)
+        embed.add_field(name="📝 Defect Log Payload", value=self.details.value, inline=False)
+        embed.set_footer(text=f"Report Submitter: {user.name} | ID: {user.id}")
+
+        # Deploy the persistent layout button matching the reference look
+        view = BugReportDisplayView()
+
+        await target_channel.send(embed=embed, view=view)
+        await interaction.followup.send("✅ **System Log Transmitted!** Your bug report has been forwarded directly to the bot developer panel.", ephemeral=True)
+
+class BugReportDisplayView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    
+    @discord.ui.button(label="File Incident Report 🚩", style=discord.ButtonStyle.danger, custom_id="bug_ui_disabled_btn", disabled=True)
+    async def visual_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass
+
+# =================================================================
 # POP-UP MODALS WITH SECURED STAFF-ONLY AI CHANNELS
 # =================================================================
 class PlayerReportModal(discord.ui.Modal, title="Submit Incident Report"):
@@ -336,6 +378,13 @@ class AppealButtonView(discord.ui.View):
     async def click_appeal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(BanAppealModal())
 
+class GeneralBugDeployView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    @discord.ui.button(label="Report Bot Bugs & Errors 🐛", style=discord.ButtonStyle.secondary, custom_id="trigger_bug_report_modal")
+    async def click_bug(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(BugReportModal())
+
 # =================================================================
 # THE MAIN COG CLASS WITH TICKET MANAGEMENT COMMANDS
 # =================================================================
@@ -355,7 +404,9 @@ class Tickets(commands.Cog):
         self.bot.add_view(ReportButtonView())
         self.bot.add_view(AppealButtonView())
         self.bot.add_view(StaffControlPanel())
-        print("🎛 decline View listeners safely linked across restarts.")
+        self.bot.add_view(GeneralBugDeployView())
+        self.bot.add_view(BugReportDisplayView())
+        print("🎛 Persistent View listeners safely linked across restarts.")
 
     @tasks.loop(seconds=10)
     async def update_web_metrics(self):
@@ -434,6 +485,39 @@ class Tickets(commands.Cog):
         else:
             await interaction.followup.send(content="⚠️ Transcript compiled successfully! (Tip: Create a `#staff-audit-logs` channel to auto-route):", file=discord_file)
 
+    # --- NEW OWNER COMMAND: REPLY BACK VIA BOT DM ---
+    @app_commands.command(name="addreportbugs", description="✉️ Owner Only: Securely transmit a direct message reply to a bug submitter.")
+    @app_commands.describe(user_id="The long numerical Discord ID string of the target user", message="The resolution message to DM")
+    async def add_report_bugs(self, interaction: discord.Interaction, user_id: str, message: str):
+        # Strict user validation block
+        if interaction.user.name != OWNER_USERNAME:
+            return await interaction.response.send_message("❌ **Access Denied:** Security signature mismatch. This command is restricted to the core owner.", ephemeral=True)
+        
+        try:
+            target_id = int(user_id)
+        except ValueError:
+            return await interaction.response.send_message("❌ Error: Target User ID string must contain numbers only.", ephemeral=True)
+
+        try:
+            target_user = await self.bot.fetch_user(target_id)
+        except Exception:
+            return await interaction.response.send_message("❌ Error: Could not locate that user profile index on Discord.", ephemeral=True)
+
+        # Build official response DM notice
+        dm_embed = discord.Embed(
+            title="✉️ Official Core Developer Response",
+            description=f"Hello **{target_user.name}**, you have received an action status update regarding your submitted bug report.",
+            color=discord.Color.purple()
+        )
+        dm_embed.add_field(name="💬 Action & Resolution Notes", value=f"```text\n{message}\n```", inline=False)
+        dm_embed.set_footer(text="Sent securely from Ly's Operational Support Center")
+
+        try:
+            await target_user.send(embed=dm_embed)
+            await interaction.response.send_message(f"🚀 **Transmission Dispatched!** Securely messaged {target_user.mention} with your notes.", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message(f"❌ Transmission Blocked: Unable to direct message {target_user.name} because their privacy blocks are enabled.", ephemeral=True)
+
     # --- DEPLOYMENT UI COMMANDS ---
     @app_commands.command(name="adduiplayerreport", description="Deploy the custom incident reporting layout center")
     @app_commands.describe(channel="The target channel for the interface")
@@ -454,6 +538,21 @@ class Tickets(commands.Cog):
         embed = discord.Embed(title="⚖️ Enforcement Appeal Operations", description="If an action was taken against your account in error, present your arguments below.", color=discord.Color.from_rgb(32, 34, 37))
         await channel.send(embed=embed, view=AppealButtonView())
         await interaction.followup.send("✅ Appeal interface deployed!", ephemeral=True)
+
+    @app_commands.command(name="adduibugreports", description="Deploy the general bug reporting button deck")
+    @app_commands.describe(channel="The target channel for the interface")
+    async def add_ui_bugs(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        if interaction.user.name != OWNER_USERNAME:
+            return await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        
+        embed = discord.Embed(
+            title="🐛 Core Defect & Bug Tracking",
+            description="Encountered an internal glitch, script freeze, or layout problem with the bot? Click the button below to submit a system log to the developer team.",
+            color=discord.Color.dark_gray()
+        )
+        await channel.send(embed=embed, view=GeneralBugDeployView())
+        await interaction.followup.send("✅ Bug reporting interaction center deployed!", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Tickets(bot))
