@@ -401,17 +401,20 @@ class Tickets(commands.Cog):
         else:
             await interaction.followup.send(content="⚠️ Compiled:", file=discord_file)
 
-    @app_commands.command(name="addreportbugs", description="✉️ Higher Rank Only: Send a DM to a bug submitter.")
+    @app_commands.command(name="addreportbugs", description="👑 OWNER ONLY: Send an update DM directly to a bug submitter.")
     async def add_report_bugs(self, interaction: discord.Interaction, user_id: str, message: str):
-        if not is_authorized_staff(interaction): return await interaction.response.send_message("❌ **Access Denied**", ephemeral=True)
+        # Enforcing strict owner check down to username and ID payload checks
+        if interaction.user.name != OWNER_USERNAME and interaction.user.id != OWNER_DISCORD_ID:
+            return await interaction.response.send_message("❌ **Strict Access Denied: This utility is locked to the Bot Developer.**", ephemeral=True)
+            
         await interaction.response.defer(ephemeral=True)
         try:
             target_user = await self.bot.fetch_user(int(user_id))
             embed = discord.Embed(title="✉️ Developer Response", description=f"Update regarding your bug report:\n```text\n{message}\n```", color=discord.Color.purple())
             await target_user.send(embed=embed)
-            await interaction.followup.send(f"🚀 Sent to {target_user.mention}.", ephemeral=True)
+            await interaction.followup.send(f"🚀 Response securely delivered to {target_user.mention}.", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ Failed: `{e}`", ephemeral=True)
+            await interaction.followup.send(f"❌ Failed to deliver DM context payload: `{e}`", ephemeral=True)
 
     @app_commands.command(name="adduiplayerreport", description="Deploy incident reporting layout center")
     async def add_ui_report(self, interaction: discord.Interaction, channel: discord.TextChannel):
