@@ -27,32 +27,34 @@ status_rotation = itertools.cycle([
     "👀 Watching over the server"
 ])
 
+# --- THE FIX: Proper Modern Cog Loading System ---
 @bot.event
-async def on_ready():
-    logger.info(f"🤖 Connected successfully as: {bot.user.name}")
-    
+async def setup_hook():
     logger.info("📂 Scanning and mounting cog extensions...")
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py") and not filename.startswith("__"):
             cog_name = f"cogs.{filename[:-3]}"
-            if cog_name not in bot.extensions:
-                try:
-                    await bot.load_extension(cog_name)
-                    logger.info(f"📦 Successfully mounted cog module: {filename}")
-                except Exception as e:
-                    logger.error(f"❌ CRITICAL LOAD FAILURE inside {filename}: {e}")
+            try:
+                await bot.load_extension(cog_name)
+                logger.info(f"📦 Successfully mounted cog module: {filename}")
+            except Exception as e:
+                logger.error(f"❌ CRITICAL LOAD FAILURE inside {filename}: {e}")
+
+@bot.event
+async def on_ready():
+    logger.info(f"🤖 Connected successfully as: {bot.user.name}")
     
     if not change_status.is_running():
         change_status.start()
         
     try:
-        logger.info("🔄 Syncing slash command tree with Discord...")
+        logger.info("🔄 Syncing slash command tree with Discord globally...")
         synced = await bot.tree.sync()
         logger.info(f"✅ Synced {len(synced)} slash commands globally!")
     except Exception as e:
         logger.error(f"❌ TREE SYNC CRASHED: {e}")
 
-# 🚨 EMERGENCY TEXT PASS-THROUGH COMMAND (SUPER SHORT) 🚨
+# 🚨 EMERGENCY TEXT PASS-THROUGH COMMAND 🚨
 @bot.command(name="check")
 async def emergency_check(ctx):
     if ctx.author.name not in ["lyzy01", "kimmendez01"]:
