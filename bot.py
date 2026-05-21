@@ -1,5 +1,4 @@
 import discord
-from discord import app_commands
 from discord.ext import commands, tasks
 import os
 import itertools
@@ -7,16 +6,14 @@ import logging
 import io
 from keep_alive import keep_alive
 
-# --- LIVE TERMINAL CAPTURE ENGINE ---
-# This captures all standard python logging prints into a memory buffer
 log_capture_buffer = io.StringIO()
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[
-        logging.StreamHandler(log_capture_buffer),  # Saves logs to memory for the /logs command
-        logging.StreamHandler()                    # Still prints logs to your Render dashboard screen
+        logging.StreamHandler(log_capture_buffer),
+        logging.StreamHandler()
     ]
 )
 logger = logging.getLogger('DiscordBot')
@@ -34,7 +31,6 @@ status_rotation = itertools.cycle([
 async def on_ready():
     logger.info(f"🤖 Connected successfully as: {bot.user.name}")
     
-    # --- SAFE EXTENSION MOUNTING ---
     logger.info("📂 Scanning and mounting cog extensions...")
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py") and not filename.startswith("__"):
@@ -44,7 +40,7 @@ async def on_ready():
                     await bot.load_extension(cog_name)
                     logger.info(f"📦 Successfully mounted cog module: {filename}")
                 except Exception as e:
-                    logger.error(f"❌ Failed loading cog module {filename}: {e}")
+                    logger.error(f"❌ CRITICAL LOAD FAILURE inside {filename}: {e}")
     
     if not change_status.is_running():
         change_status.start()
@@ -54,65 +50,24 @@ async def on_ready():
         synced = await bot.tree.sync()
         logger.info(f"✅ Synced {len(synced)} slash commands globally!")
     except Exception as e:
-        logger.error(f"❌ Failed to sync commands: {e}")
+        logger.error(f"❌ TREE SYNC CRASHED: {e}")
 
-# --- SECURE DEVELOPER LOGS COMMAND ---
-@bot.tree.command(name="logs", description="🔒 Private Developer Tool: Fetch recent live server boot logs and errors.")
-async def send_logs(interaction: discord.Interaction):
-    # Strict Developer User check using your account name
-    # Checks both your current display setup name and default account identity
-    if interaction.user.name != "lyzy01" and interaction.user.name != "kimmendez01":
-        await interaction.response.send_message("❌ **Access Denied:** This command is securely locked to the bot owner.", ephemeral=True)
+# 🚨 EMERGENCY TEXT PASS-THROUGH COMMAND 🚨
+@bot.command(name="check")
+async def emergency_check(ctx):
+    if ctx.author.name not in ["lyzy01", "kimmendez01"]:
         return
 
-    # Defer response privately so people in the channel don't see you fetching logs
-    await interaction.response.defer(ephemeral=True)
-
-    try:
-        # Pull the last 1500 characters from our memory stream to avoid hitting Discord's 2000 character limit
-        full_logs = log_capture_buffer.getvalue()
-        recent_logs = full_logs[-1800:] if len(full_logs) > 1800 else full_logs
-
-        if not recent_logs.strip():
-            recent_logs = "System buffer active. No log entries recorded yet."
-
-        # Open a direct message channel with you
-        dm_channel = interaction.user.dm_channel or await interaction.user.create_dm()
-        
-        # Format beautifully inside a markdown code block
-        log_message = f"📋 **Live System Logs for {bot.user.name}:**\n```text\n{recent_logs}\n```"
-        await dm_channel.send(log_message)
-        
-        # Confirm to the slash interface that it was sent safely
-        await interaction.followup.send("📨 **Logs dispatched safely!** Check your Direct Messages.", ephemeral=True)
-        
-    except discord.Forbidden:
-        await interaction.followup.send("⚠️ **Delivery Failure:** I couldn't DM you! Please verify that your 'Allow direct messages from server members' privacy setting is turned on.", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"⚠️ **Internal command anomaly:** `{e}`", ephemeral=True)
-
-@bot.command(name="sync")
-async def manual_sync(ctx):
-    admin_keywords = ["admin", "moderator", "staff", "owner"]
-    is_staff = any(any(k in role.name.lower() for k in admin_keywords) for role in ctx.author.roles) or ctx.author.name in ["lyzy01", "kimmendez01"]
+    full_logs = log_capture_buffer.getvalue()
+    # Grab the last 15 lines of errors
+    recent_lines = full_logs.split('\n')[-15:]
+    clean_output = '\n'.join(recent_lines)
     
-    if not is_staff:
-        return await ctx.send("❌ Access Denied.")
-        
     try:
-        synced = await bot.tree.sync()
-        await ctx.send(f"✅ Manually forced synchronization of {len(synced)} slash commands!")
+        await ctx.author.send(f"📋 **Emergency Diagnostics:**\n```text\n{clean_output}\n```")
+        await ctx.message.add_reaction("📨")
     except Exception as e:
-        await ctx.send(f"❌ Force sync failed: {e}")
+        await ctx.send(f"⚠️ Cannot DM logs. Terminal output slice:\n
+http://googleusercontent.com/immersive_entry_chip/0
 
-@tasks.loop(seconds=10)
-async def change_status():
-    await bot.change_presence(activity=discord.Game(next(status_rotation)))
-
-async def main():
-    keep_alive()
-    await bot.start(os.getenv("DISCORD_TOKEN"))
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+The bot will print out or DM you the exact terminal lines showing which specific file is broken (e.g., a missing variable in `tickets.py` or a layout error somewhere else). Paste what it gives you or what your Render logs show right here, and we will clean it out instantly!
