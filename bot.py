@@ -19,6 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger('DiscordBot')
 
+# Explicitly defining All Intents to guarantee member visibility
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -58,13 +59,8 @@ async def on_ready():
     
     if not change_status.is_running():
         change_status.start()
-        
-    try:
-        logger.info("🔄 Syncing slash command tree with Discord globally...")
-        synced = await bot.tree.sync()
-        logger.info(f"✅ Synced {len(synced)} slash commands globally!")
-    except Exception as e:
-        logger.error(f"❌ TREE SYNC CRASHED: {e}")
+    
+    logger.info("⚡ System is fully operational. Use !sync to deploy command changes manually.")
 
 # 🚨 DIAGNOSTIC LOG CHECK COMMAND 🚨
 @bot.command(name="check")
@@ -84,11 +80,13 @@ async def emergency_check(ctx):
 async def manual_sync(ctx):
     if ctx.author.name not in ["lyzy01", "kimmendez01"]:
         return await ctx.send("❌ Access Denied.")
+    
+    progress_msg = await ctx.send("⏳ **Synchronizing slash tree globally with Discord...**")
     try:
         synced = await bot.tree.sync()
-        await ctx.send(f"✅ Manually forced synchronization of {len(synced)} slash commands!")
+        await progress_msg.edit(content=f"✅ **Manually forced synchronization of {len(synced)} slash commands globally!**")
     except Exception as e:
-        await ctx.send(f"❌ Force sync failed: {e}")
+        await progress_msg.edit(content=f"❌ **Force sync failed:** `{e}`")
 
 @tasks.loop(seconds=10)
 async def change_status():
