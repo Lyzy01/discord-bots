@@ -308,8 +308,8 @@ class Tickets(commands.Cog):
             keep_alive.LIVE_STATS["processed"] = processed_cases_counter
         except Exception: pass
 
-    # --- SET ROLE COLOR COMMAND ---
-    @app_commands.command(name="setrolecolor", description="🎨 Higher Rank Only: Alter a role's hex color code.")
+    # --- SET TICKET ROLE COLOR COMMAND ---
+    @app_commands.command(name="setticketrolecolor", description="🎨 Higher Rank Only: Alter a role's hex color code.")
     @app_commands.describe(role="The server role profile to alter", hex_code="The new Color Hex value (e.g. #FF5555)")
     async def set_role_color(self, interaction: discord.Interaction, role: discord.Role, hex_code: str):
         if not is_authorized_staff(interaction):
