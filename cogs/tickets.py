@@ -194,23 +194,20 @@ class BugReportModal(discord.ui.Modal, title="Report Bugs & Errors"):
         guild = interaction.guild
         user = interaction.user
 
-        # Look for the #report-here text channel inside the server hierarchy
+        # Look for the #report-here tracking corridor channel
         target_channel = discord.utils.get(guild.text_channels, name="report-here")
         if not target_channel:
-            await interaction.followup.send("❌ Error: The `#report-here` tracking corridor cannot be found in this server.", ephemeral=True)
-            return
+            target_channel = interaction.channel # Fallback if channel search delays
 
-        # Create the Red styled Operational UI card matching image 4 layout rules
         embed = discord.Embed(
             title="🛡️ Integrity Operations Center",
-            description="See someone breaking guidelines or using exploits? Click below to brief our staff agents.",
-            color=discord.Color.from_rgb(239, 68, 68) # Clean aesthetic red tint
+            description="A new system bug or bot execution error has been registered below.",
+            color=discord.Color.red()
         )
         embed.add_field(name="🐛 System Target", value=f"`{self.bug_title.value}`", inline=False)
         embed.add_field(name="📝 Defect Log Payload", value=self.details.value, inline=False)
         embed.set_footer(text=f"Report Submitter: {user.name} | ID: {user.id}")
 
-        # Deploy the persistent layout button matching the reference look
         view = BugReportDisplayView()
 
         await target_channel.send(embed=embed, view=view)
@@ -489,19 +486,21 @@ class Tickets(commands.Cog):
     @app_commands.command(name="addreportbugs", description="✉️ Owner Only: Securely transmit a direct message reply to a bug submitter.")
     @app_commands.describe(user_id="The long numerical Discord ID string of the target user", message="The resolution message to DM")
     async def add_report_bugs(self, interaction: discord.Interaction, user_id: str, message: str):
+        await interaction.response.defer(ephemeral=True)
+        
         # Strict user validation block
         if interaction.user.name != OWNER_USERNAME:
-            return await interaction.response.send_message("❌ **Access Denied:** Security signature mismatch. This command is restricted to the core owner.", ephemeral=True)
+            return await interaction.followup.send("❌ **Access Denied:** Security signature mismatch. This command is restricted to the core owner.", ephemeral=True)
         
         try:
             target_id = int(user_id)
         except ValueError:
-            return await interaction.response.send_message("❌ Error: Target User ID string must contain numbers only.", ephemeral=True)
+            return await interaction.followup.send("❌ Error: Target User ID string must contain numbers only.", ephemeral=True)
 
         try:
             target_user = await self.bot.fetch_user(target_id)
         except Exception:
-            return await interaction.response.send_message("❌ Error: Could not locate that user profile index on Discord.", ephemeral=True)
+            return await interaction.followup.send("❌ Error: Could not locate that user profile index on Discord.", ephemeral=True)
 
         # Build official response DM notice
         dm_embed = discord.Embed(
@@ -514,9 +513,9 @@ class Tickets(commands.Cog):
 
         try:
             await target_user.send(embed=dm_embed)
-            await interaction.response.send_message(f"🚀 **Transmission Dispatched!** Securely messaged {target_user.mention} with your notes.", ephemeral=True)
+            await interaction.followup.send(f"🚀 **Transmission Dispatched!** Securely messaged {target_user.mention} with your notes.", ephemeral=True)
         except discord.Forbidden:
-            await interaction.response.send_message(f"❌ Transmission Blocked: Unable to direct message {target_user.name} because their privacy blocks are enabled.", ephemeral=True)
+            await interaction.followup.send(f"❌ Transmission Blocked: Unable to direct message {target_user.name} because their privacy blocks are enabled.", ephemeral=True)
 
     # --- DEPLOYMENT UI COMMANDS ---
     @app_commands.command(name="adduiplayerreport", description="Deploy the custom incident reporting layout center")
