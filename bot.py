@@ -52,14 +52,13 @@ async def on_ready():
     except Exception as e:
         logger.error(f"❌ TREE SYNC CRASHED: {e}")
 
-# 🚨 EMERGENCY TEXT PASS-THROUGH COMMAND 🚨
+# 🚨 EMERGENCY TEXT PASS-THROUGH COMMAND (FIXED STRING FORMATTING) 🚨
 @bot.command(name="check")
 async def emergency_check(ctx):
     if ctx.author.name not in ["lyzy01", "kimmendez01"]:
         return
 
     full_logs = log_capture_buffer.getvalue()
-    # Grab the last 15 lines of errors
     recent_lines = full_logs.split('\n')[-15:]
     clean_output = '\n'.join(recent_lines)
     
@@ -67,7 +66,14 @@ async def emergency_check(ctx):
         await ctx.author.send(f"📋 **Emergency Diagnostics:**\n```text\n{clean_output}\n```")
         await ctx.message.add_reaction("📨")
     except Exception as e:
-        await ctx.send(f"⚠️ Cannot DM logs. Terminal output slice:\n
+        # Keep everything on a single safe text string line to avoid Python parser crashes
+        await ctx.send(f"⚠️ Cannot DM logs. Snippet: 
 http://googleusercontent.com/immersive_entry_chip/0
 
-The bot will print out or DM you the exact terminal lines showing which specific file is broken (e.g., a missing variable in `tickets.py` or a layout error somewhere else). Paste what it gives you or what your Render logs show right here, and we will clean it out instantly!
+---
+
+### 🚀 Save and Verify
+
+1. Update **`bot.py`** with this version on GitHub and commit changes.
+2. Watch your Render dashboard. The logs will read `==> Build successful 🎉` and then run smoothly without hitting the syntax error.
+3. Once Render shows your deployment as active, go to Discord and run your slash menu or type **`!sync`** if your client needs an immediate update. Your `/uptime` command will finally show up!
