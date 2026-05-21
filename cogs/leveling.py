@@ -15,7 +15,6 @@ class Leveling(commands.Cog):
 
     def load_data(self):
         if not os.path.exists(DATA_FILE):
-            # Fallback check for local vs disk volume setup
             if os.path.exists("levels.json"):
                 with open("levels.json", "r") as f:
                     try: return json.load(f)
@@ -28,7 +27,6 @@ class Leveling(commands.Cog):
                 return {}
 
     def save_data(self):
-        # Ensure the directory exists before saving
         os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
         with open(DATA_FILE, "w") as f:
             json.dump(self.data, f, indent=4)
@@ -46,47 +44,6 @@ class Leveling(commands.Cog):
         if level >= 1000:  return "💾 [ Data Warden ]"
         if level >= 100:   return "⚡ [ Netrunner Elite ]"
         return "🌱 [ Script Kiddie ]"
-
-    async def check_and_assign_role(self, member, level):
-        guild = member.guild
-        guild_id = str(guild.id)
-        
-        milestones = [1, 5, 10, 20, 30, 40, 50, 100, 500, 1000]
-        if level not in milestones:
-            return
-
-        role_name = f"Level {level}+"
-        role = discord.utils.get(guild.roles, name=role_name)
-        
-        # Safe default color conversion
-        chosen_color = discord.Color.from_rgb(max(50, 255 - (level * 2)), min(200, 50 + (level * 2)), 230)
-        
-        if guild_id in self.data and "role_colors" in self.data[guild_id]:
-            hex_str = self.data[guild_id]["role_colors"].get(str(level))
-            if hex_str:
-                try:
-                    if not hex_str.startswith("#"):
-                        hex_str = f"#{hex_str}"
-                    chosen_color = discord.Color.from_str(hex_str)
-                except ValueError:
-                    pass
-
-        if role is None:
-            try:
-                role = await guild.create_role(
-                    name=role_name, 
-                    color=chosen_color, 
-                    reason="Automated Leveling Milestone System"
-                )
-            except discord.Forbidden:
-                print(f"❌ Missing permissions to create: {role_name}")
-                return
-
-        if role and role not in member.roles:
-            try:
-                await member.add_roles(role)
-            except discord.Forbidden:
-                print(f"❌ Cannot assign role {role_name}.")
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -129,40 +86,7 @@ class Leveling(commands.Cog):
 
         self.save_data()
 
-    async def generate_level_embed(self, interaction: discord.Interaction, member: discord.Member):
-        guild_id = str(interaction.guild.id)
-        user_id = str(member.id)
-
-        xp = 0
-        level = 0
-
-        if guild_id in self.data and "users" in self.data[guild_id] and user_id in self.data[guild_id]["users"]:
-            xp = self.data[guild_id]["users"][user_id]["xp"]
-            level = self.data[guild_id]["users"][user_id]["level"]
-
-        title = self.get_title(guild_id, level)
-        
-        if level >= MAX_LEVEL:
-            progress_bar = "██████████"
-            xp_display = "MAX STATUS ACHIEVEMENT"
-        else:
-            next_lvl_xp = (level + 1) * 100
-            filled = math.floor((xp / next_lvl_xp) * 10)
-            filled = max(0, min(10, filled))
-            progress_bar = "█" * filled + "░" * (10 - filled)
-            xp_display = f"{xp:,} / {next_lvl_xp:,} XP"
-
-        embed = discord.Embed(
-            title=f"👤 {member.display_name}'s Progress Core",
-            color=discord.Color.purple()
-        )
-        embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(name="🏆 Current Title Rank", value=f"`{title}`", inline=False)
-        embed.add_field(name="📈 Node Level Status", value=f"**Level {level:,}** / `{MAX_LEVEL:,}`", inline=True)
-        embed.add_field(name="📊 Sync Progress Bar", value=f"`[{progress_bar}]` \n*{xp_display}*", inline=False)
-        embed.set_footer(text=f"Server Identity Index: {interaction.guild.name}")
-        
-        return embed
+    # --- ALL SLASH COMMANDS MOVED TOGETHER FOR CLEAN LOADING ---
 
     @app_commands.command(name="level", description="Displays your current server level and rank profile.")
     async def level_command(self, interaction: discord.Interaction, member: discord.Member = None):
@@ -176,7 +100,6 @@ class Leveling(commands.Cog):
         embed = await self.generate_level_embed(interaction, member)
         await interaction.response.send_message(embed=embed)
 
-    # --- CRASH FIXED COLOR COMMAND ---
     @app_commands.command(name="setrolecolor", description="Changes the color of an existing level milestone role.")
     @app_commands.describe(level="The level milestone (e.g., 1, 5, 10)", hex_color="The Hex color code (e.g., #FF5555 or 00FFCC)")
     @app_commands.default_permissions(manage_roles=True)
@@ -184,7 +107,6 @@ class Leveling(commands.Cog):
         guild = interaction.guild
         guild_id = str(guild.id)
 
-        # Make sure hex string formatting satisfies format requirements
         formatted_hex = hex_color if hex_color.startswith("#") else f"#{hex_color}"
         try:
             resolved_color = discord.Color.from_str(formatted_hex)
@@ -234,6 +156,83 @@ class Leveling(commands.Cog):
         self.save_data()
 
         await interaction.response.send_message(f"✅ Success! Level {level} milestone has been renamed to: **{new_title}**")
+
+    # --- INTERNAL UTILITY METHODS MOVED TO BOTTOM TO PREVENT SYNTAX BREAKS ---
+
+    async def generate_level_embed(self, interaction: discord.Interaction, member: discord.Member):
+        guild_id = str(interaction.guild.id)
+        user_id = str(member.id)
+
+        xp = 0
+        level = 0
+
+        if guild_id in self.data and "users" in self.data[guild_id] and user_id in self.data[guild_id]["users"]:
+            xp = self.data[guild_id]["users"][user_id]["xp"]
+            level = self.data[guild_id]["users"][user_id]["level"]
+
+        title = self.get_title(guild_id, level)
+        
+        if level >= MAX_LEVEL:
+            progress_bar = "██████████"
+            xp_display = "MAX STATUS ACHIEVEMENT"
+        else:
+            next_lvl_xp = (level + 1) * 100
+            filled = math.floor((xp / next_lvl_xp) * 10)
+            filled = max(0, min(10, filled))
+            progress_bar = "█" * filled + "░" * (10 - filled)
+            xp_display = f"{xp:,} / {next_lvl_xp:,} XP"
+
+        embed = discord.Embed(
+            title=f"👤 {member.display_name}'s Progress Core",
+            color=discord.Color.purple()
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.add_field(name="🏆 Current Title Rank", value=f"`{title}`", inline=False)
+        embed.add_field(name="📈 Node Level Status", value=f"**Level {level:,}** / `{MAX_LEVEL:,}`", inline=True)
+        embed.add_field(name="📊 Sync Progress Bar", value=f"`[{progress_bar}]` \n*{xp_display}*", inline=False)
+        embed.set_footer(text=f"Server Identity Index: {interaction.guild.name}")
+        
+        return embed
+
+    async def check_and_assign_role(self, member, level):
+        guild = member.guild
+        guild_id = str(guild.id)
+        
+        milestones = [1, 5, 10, 20, 30, 40, 50, 100, 500, 1000]
+        if level not in milestones:
+            return
+
+        role_name = f"Level {level}+"
+        role = discord.utils.get(guild.roles, name=role_name)
+        
+        chosen_color = discord.Color.from_rgb(max(50, 255 - (level * 2)), min(200, 50 + (level * 2)), 230)
+        
+        if guild_id in self.data and "role_colors" in self.data[guild_id]:
+            hex_str = self.data[guild_id]["role_colors"].get(str(level))
+            if hex_str:
+                try:
+                    if not hex_str.startswith("#"):
+                        hex_str = f"#{hex_str}"
+                    chosen_color = discord.Color.from_str(hex_str)
+                except ValueError:
+                    pass
+
+        if role is None:
+            try:
+                role = await guild.create_role(
+                    name=role_name, 
+                    color=chosen_color, 
+                    reason="Automated Leveling Milestone System"
+                )
+            except discord.Forbidden:
+                print(f"❌ Missing permissions to create: {role_name}")
+                return
+
+        if role and role not in member.roles:
+            try:
+                await member.add_roles(role)
+            except discord.Forbidden:
+                print(f"❌ Cannot assign role {role_name}.")
 
 async def setup(bot):
     await bot.add_cog(Leveling(bot))
