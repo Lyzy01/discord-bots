@@ -38,7 +38,7 @@ class Leveling(commands.Cog):
         if level >= 5000:  return "🧠 [ Mainframe Overlord ]"
         if level >= 1000:  return "💾 [ Data Warden ]"
         if level >= 100:   return "⚡ [ Netrunner Elite ]"
-        return "🌱 [ Script Kiddie ]"
+        return "🌱 [ I Just Started ]"
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -79,8 +79,7 @@ class Leveling(commands.Cog):
 
         self.save_data()
 
-    # --- Cool Framework /level Command ---
-    @app_commands.command(name="level", description="Displays your current server level and rank profile.")
+    @app_commands.command(name="level", description="Displays your current server level and rank profile via interactive card.")
     async def level_command(self, interaction: discord.Interaction, member: discord.Member = None):
         member = member or interaction.user
         guild_id = str(interaction.guild.id)
@@ -95,10 +94,9 @@ class Leveling(commands.Cog):
 
         title = self.get_title(guild_id, level)
         
-        # Progress Bar Math
         if level >= MAX_LEVEL:
             progress_bar = "██████████"
-            xp_display = "MAX LEVEL"
+            xp_display = "MAX STATUS ACHIVEMENT"
         else:
             next_lvl_xp = (level + 1) * 100
             filled = math.floor((xp / next_lvl_xp) * 10)
@@ -106,19 +104,19 @@ class Leveling(commands.Cog):
             progress_bar = "█" * filled + "░" * (10 - filled)
             xp_display = f"{xp:,} / {next_lvl_xp:,} XP"
 
-        # Framework Layout Output
-        framework = (
-            f"╔══════════════════════════════════╗\n"
-            f"   👤 **USER DATA LINK:** {member.name.upper()}\n"
-            f"╚══════════════════════════════════╝\n"
-            f"> 🏆 **RANK STATUS:** `{title}`\n"
-            f"> 📈 **NODE LEVEL:** `Lvl {level:,} / {MAX_LEVEL:,}`\n"
-            f"> 📊 **SYNC PROGRESS:** `[{progress_bar}]` *({xp_display})*\n"
-            f"────────────────────────────────────"
+        # Modern UI Framework design using Discord Embeds
+        embed = discord.Embed(
+            title=f"👤 {member.display_name}'s Progress Core",
+            color=discord.Color.purple()
         )
-        await interaction.response.send_message(framework)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.add_field(name="🏆 Current Title Rank", value=f"`{title}`", inline=False)
+        embed.add_field(name="📈 Node Level Status", value=f"**Level {level:,}** / `{MAX_LEVEL:,}`", inline=True)
+        embed.add_field(name="📊 Sync Progress Bar", value=f"`[{progress_bar}]` \n*{xp_display}*", inline=False)
+        embed.set_footer(text=f"Server Identity Index: {interaction.guild.name}")
 
-    # Legacy profile command pointing to the exact same logic
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="profile", description="Displays your server level status.")
     async def profile(self, interaction: discord.Interaction, member: discord.Member = None):
         await self.level_command(interaction, member)
