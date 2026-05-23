@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 import os
-import ffdl  # Portable FFmpeg downloader
 
 # YOUR VERIFIED ID
 MY_ID = 1366110873248071801 
@@ -11,6 +10,7 @@ MY_ID = 1366110873248071801
 class Voice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # This is where the bot will store its audio engine
         self.ffmpeg_path = "./ffmpeg"
 
     # 1. THE "PLAY THIS" REPLY LISTENER
@@ -52,7 +52,7 @@ class Voice(commands.Cog):
             await interaction.followup.send(f"⚠️ Error: `{e}`")
 
     # 3. PLAY BY LINK OR ID
-    @app_commands.command(name="playvcsound", description="Owner Only: Play sound")
+    @app_commands.command(name="playvcsound", description="Owner Only: Play sound from Link or Message ID")
     async def playvcsound(self, interaction: discord.Interaction, input_data: str):
         if interaction.user.id != MY_ID: return
         await interaction.response.defer(ephemeral=True)
@@ -62,6 +62,8 @@ class Voice(commands.Cog):
             if msg.attachments:
                 await self.play_audio(interaction, msg.attachments[0].url)
                 await interaction.followup.send(f"🎵 Playing: `{msg.attachments[0].filename}`")
+            else:
+                await interaction.followup.send("❌ No file found.")
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error: `{e}`")
 
@@ -85,28 +87,36 @@ class Voice(commands.Cog):
 
     # --- CORE AUDIO ENGINE ---
     async def play_audio(self, ctx_or_inter, url):
-        # Ensure portable FFmpeg exists
-        if not os.path.exists(self.ffmpeg_path):
-            print("📥 Downloading portable FFmpeg...")
-            ffdl.install()
-
+        import ffdl
+        
+        # Check for both './ffmpeg' and './ffmpeg.exe' just in case
+        current_exe = self.ffmpeg_path
+        if not os.path.exists(current_exe):
+            if os.path.exists("./ffmpeg.exe"):
+                current_exe = "./ffmpeg.exe"
+            else:
+                print("📥 Downloading portable FFmpeg...")
+                ffdl.install()
+        
         guild = ctx_or_inter.guild
         user = ctx_or_inter.author if hasattr(ctx_or_inter, 'author') else ctx_or_inter.user
         vc = guild.voice_client
         
         if not vc:
-            if user.voice: vc = await user.voice.channel.connect(self_deaf=True)
-            else: return
+            if user.voice: 
+                vc = await user.voice.channel.connect(self_deaf=True)
+            else: 
+                return
 
-        if vc.is_playing(): vc.stop()
+        if vc.is_playing(): 
+            vc.stop()
 
         opts = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn'
         }
 
-        # Use the local executable path
-        vc.play(discord.FFmpegPCMAudio(url, executable=self.ffmpeg_path, **opts))
+        vc.play(discord.FFmpegPCMAudio(url, executable=current_exe, **opts))
 
 async def setup(bot):
     await bot.add_cog(Voice(bot))
