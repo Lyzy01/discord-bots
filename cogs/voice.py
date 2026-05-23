@@ -1,16 +1,15 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import re # Needed to find IDs inside links
 
-# YOUR UPDATED ID
+# YOUR VERIFIED ID
 MY_ID = 1366110873248071801 
 
 class Voice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # --- THE "REPLY TO PLAY" LISTENER ---
+    # --- THE "PLAY THIS" REPLY LISTENER ---
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.id != MY_ID or message.author.bot:
@@ -23,29 +22,22 @@ class Voice(commands.Cog):
                     await self.play_audio(message, target_msg.attachments[0].url)
                     await message.add_reaction("🎵")
             except Exception as e:
-                await message.channel.send(f"⚠️ Error: `{e}`")
+                print(f"Error in on_message: {e}")
 
-    # --- THE IMPROVED /playvcsound COMMAND ---
+    # --- THE /playvcsound COMMAND ---
     @app_commands.command(name="playvcsound", description="Owner Only: Play sound from a Link or Message ID")
+    @app_commands.describe(input_data="Paste the Message Link or the Message ID here")
     async def playvcsound(self, interaction: discord.Interaction, input_data: str):
-        if interaction.user.id != MY_ID: return
+        if interaction.user.id != MY_ID:
+            return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
+        
         await interaction.response.defer(ephemeral=True)
 
         try:
-            # 1. If it's a direct URL to a file (ends in .mp3 etc)
-            if input_data.startswith("http") and any(input_data.endswith(ext) for ext in [".mp3", ".wav", ".ogg"]):
-                await self.play_audio(interaction, input_data)
-                return await interaction.followup.send("🎵 Playing from direct link!")
+            # Clean the input: If it's a link, get the last part (the ID)
+            clean_id = input_data.split('/')[-1]
+            msg_id = int(clean_id)
 
-            # 2. If it's a Discord Message Link, extract the ID from the end
-            if "discord.com/channels/" in input_data:
-                # This regex grabs the very last numbers in the link
-                msg_id = int(re.search(r'/(\[0-9]+)$', input_data).group(1))
-            else:
-                # Otherwise, assume the user just typed the ID number
-                msg_id = int(input_data)
-
-            # 3. Fetch message and play
             msg = await interaction.channel.fetch_message(msg_id)
             if msg.attachments:
                 await self.play_audio(interaction, msg.attachments[0].url)
@@ -54,7 +46,7 @@ class Voice(commands.Cog):
                 await interaction.followup.send("❌ No file found in that message.")
 
         except Exception as e:
-            await interaction.followup.send(f"⚠️ Error: `{e}`. Make sure the bot can see the channel!")
+            await interaction.followup.send(f"⚠️ Error: `{e}`. Make sure the bot is in this DM/Server!")
 
     # --- SHARED PLAYING LOGIC ---
     async def play_audio(self, ctx_or_inter, url):
