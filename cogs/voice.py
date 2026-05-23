@@ -12,22 +12,21 @@ class Voice(commands.Cog):
         self.ffmpeg_path = "./ffmpeg"
 
     @app_commands.command(name="joinvc", description="Owner Only: Force join a channel")
+    @app_commands.describe(server_id="The ID of the server", channel_id="The ID of the voice channel")
     async def joinvc(self, interaction: discord.Interaction, server_id: str, channel_id: str):
-        if interaction.user.id != MY_ID: return
-        await interaction.response.defer(ephemeral=True)
+        if interaction.user.id != MY_ID:
+            return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
         
+        await interaction.response.defer(ephemeral=True)
         try:
-            # Clean up the input in case of accidental spaces
             s_id = int(server_id.strip())
             c_id = int(channel_id.strip())
 
             guild = self.bot.get_guild(s_id)
             if not guild:
-                return await interaction.followup.send(f"❌ Server `{s_id}` not found. Am I in that server?")
+                return await interaction.followup.send(f"❌ Server `{s_id}` not found.")
 
-            # Look for the channel anywhere the bot can see
             channel = self.bot.get_channel(c_id)
-            
             if not channel:
                 return await interaction.followup.send(f"❌ Channel `{c_id}` not found.")
 
@@ -38,21 +37,21 @@ class Voice(commands.Cog):
                 
             await interaction.followup.send(f"✅ Joined `{channel.name}`!")
         except Exception as e:
-            await interaction.followup.send(f"⚠️ System Error: `{e}`")
+            await interaction.followup.send(f"⚠️ Error: `{e}`")
 
-    @app_commands.command(name="viewvoice", description="List everything clearly")
+    @app_commands.command(name="viewvoice", description="List all server and channel IDs")
     async def viewvoice(self, interaction: discord.Interaction):
         if interaction.user.id != MY_ID: return
         await interaction.response.defer(ephemeral=True)
         
-        output = "**📋 COPY THESE IDs:**\n\n"
+        msg = "**📋 SERVER AND CHANNEL IDs**\n\n"
         for g in self.bot.guilds:
-            output += f"**SERVER NAME:** {g.name}\n"
-            output += f"**SERVER ID:** `{g.id}`\n"
-            vcs = [f"  ↳ VC: `{c.name}` | ID: `{c.id}`" for c in g.voice_channels]
-            output += "\n".join(vcs) + "\n\n"
+            msg += f"**SERVER:** {g.name}\n**SERVER ID:** `{g.id}`\n"
+            for c in g.voice_channels:
+                msg += f"↳ VC: `{c.name}` | **VC ID:** `{c.id}`\n"
+            msg += "\n"
         
-        await interaction.followup.send(output[:2000])
+        await interaction.followup.send(msg[:2000])
 
     async def play_audio(self, ctx_or_inter, url):
         import ffdl
