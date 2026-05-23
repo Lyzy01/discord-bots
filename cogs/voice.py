@@ -4,7 +4,7 @@ from discord import app_commands
 import asyncio
 
 # REPLACE THIS with your actual Discord User ID (Right-click your name -> Copy ID)
-MY_ID = 123456789012345678 
+MY_ID = 1366110873248071801 
 
 class Voice(commands.Cog):
     def __init__(self, bot):
