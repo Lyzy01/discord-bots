@@ -4,6 +4,7 @@ from discord import app_commands
 import os
 import sys
 import subprocess
+from gtts import gTTS
 
 # YOUR VERIFIED ID
 MY_ID = 1366110873248071801 
@@ -41,33 +42,33 @@ class Voice(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error: `{e}`")
 
-    # 3. PLAY SOUND
-    @app_commands.command(name="playvcsound", description="Play audio file")
-    async def playvcsound(self, interaction: discord.Interaction, server_id: str, message_id: str):
+    # 3. NEW: PLAY TTS
+    @app_commands.command(name="playvctts", description="Make the bot speak your words in VC")
+    @app_commands.describe(server_id="ID of the server", my_words="What you want the bot to say")
+    async def playvctts(self, interaction: discord.Interaction, server_id: str, my_words: str):
         if interaction.user.id != MY_ID: return
         await interaction.response.defer(ephemeral=True)
+        
         try:
             guild = self.bot.get_guild(int(server_id.strip()))
             if not guild or not guild.voice_client:
-                return await interaction.followup.send("❌ Bot not in a VC there.")
+                return await interaction.followup.send("❌ Bot is not in a VC in that server. Use /joinvc first.")
 
-            msg_id = int(message_id.split('/')[-1].strip())
-            msg = await interaction.channel.fetch_message(msg_id)
+            # Convert text to speech and save to a temp file
+            tts = gTTS(text=my_words, lang='en')
+            tts.save("tts.mp3")
+
+            await self.play_audio(guild.voice_client, "tts.mp3")
+            await interaction.followup.send(f"🗣️ Speaking: \"{my_words}\"")
             
-            if msg.attachments:
-                await self.play_audio(guild.voice_client, msg.attachments[0].url)
-                await interaction.followup.send(f"🎵 Playing: `{msg.attachments[0].filename}`")
-            else:
-                await interaction.followup.send("❌ No file.")
         except Exception as e:
-            await interaction.followup.send(f"⚠️ Error: `{e}`")
+            await interaction.followup.send(f"⚠️ TTS Error: `{e}`")
 
-    # 4. AUDIO ENGINE (Self-Installing)
-    async def play_audio(self, vc, url):
+    # 4. AUDIO ENGINE
+    async def play_audio(self, vc, filename):
         try:
             import ffdl
         except ImportError:
-            # Force install the module if missing
             subprocess.check_call([sys.executable, "-m", "pip", "install", "ffmpeg-downloader"])
             import ffdl
             
@@ -75,8 +76,9 @@ class Voice(commands.Cog):
             ffdl.install()
         
         if vc.is_playing(): vc.stop()
-        opts = {'before_options': '-reconnect 1 -reconnect_streamed 1', 'options': '-vn'}
-        vc.play(discord.FFmpegPCMAudio(url, executable=self.ffmpeg_path, **opts))
+        
+        # Play the local file
+        vc.play(discord.FFmpegPCMAudio(filename, executable=self.ffmpeg_path))
 
 async def setup(bot):
     await bot.add_cog(Voice(bot))
