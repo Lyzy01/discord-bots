@@ -70,27 +70,36 @@ class Voice(commands.Cog):
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # --- 3. JOIN BY NAME ---
-    @app_commands.command(name="joinvc", description="Owner Only: Join a specific VC by name")
-    async def joinvc(self, interaction: discord.Interaction, channel_name: str):
+   # --- UPDATED JOIN BY SERVER AND CHANNEL ---
+    @app_commands.command(name="joinvc", description="Owner Only: Join a specific server and VC")
+    async def joinvc(self, interaction: discord.Interaction, server_name: str, channel_name: str):
         if interaction.user.id != MY_ID:
             return await interaction.response.send_message("❌ Access Denied.", ephemeral=True)
 
-        target_channel = None
-        for guild in self.bot.guilds:
-            target_channel = discord.utils.get(guild.voice_channels, name=channel_name)
-            if target_channel:
-                break
+        # 1. Acknowledge the command immediately (prevents "did not respond" error)
+        await interaction.response.defer(ephemeral=True)
+
+        # 2. Find the specific server
+        guild = discord.utils.get(self.bot.guilds, name=server_name)
+        if not guild:
+            return await interaction.followup.send(f"❌ Server `{server_name}` not found. Check the name in `/viewvoice`!")
+
+        # 3. Find the specific voice channel in that server
+        target_channel = discord.utils.get(guild.voice_channels, name=channel_name)
         
         if target_channel:
-            # If already in a voice client in that guild, move; otherwise, connect
-            if target_channel.guild.voice_client:
-                await target_channel.guild.voice_client.move_to(target_channel)
-            else:
-                await target_channel.connect()
-            await interaction.response.send_message(f"✅ Joined `{channel_name}` in `{target_channel.guild.name}`")
+            try:
+                # Handle moving if already in a VC in that guild
+                if guild.voice_client:
+                    await guild.voice_client.move_to(target_channel)
+                else:
+                    await target_channel.connect()
+                
+                await interaction.followup.send(f"✅ Teleported to `{channel_name}` in `{guild.name}`")
+            except Exception as e:
+                await interaction.followup.send(f"❌ Error joining: `{e}`")
         else:
-            await interaction.response.send_message(f"❌ Could not find a channel named `{channel_name}` anywhere.")
+            await interaction.followup.send(f"❌ Could not find voice channel `{channel_name}` in `{server_name}`.")
 
     # --- 4. GLOBAL LEAVE ---
     @app_commands.command(name="stop_all_voice", description="Owner Only: Force leave all voice channels")
