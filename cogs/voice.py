@@ -4,7 +4,6 @@ from discord import app_commands
 import os
 import sys
 import subprocess
-from gtts import gTTS
 
 # YOUR VERIFIED ID
 MY_ID = 1366110873248071801 
@@ -42,27 +41,27 @@ class Voice(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error: `{e}`")
 
-    # 3. NEW: PLAY TTS
-    @app_commands.command(name="playvctts", description="Make the bot speak your words in VC")
-    @app_commands.describe(server_id="ID of the server", my_words="What you want the bot to say")
+    # 3. PLAY TTS
+    @app_commands.command(name="playvctts", description="Bot speaks your words")
     async def playvctts(self, interaction: discord.Interaction, server_id: str, my_words: str):
         if interaction.user.id != MY_ID: return
         await interaction.response.defer(ephemeral=True)
         
         try:
+            # Import gTTS here to prevent boot-up crashes
+            from gtts import gTTS
+            
             guild = self.bot.get_guild(int(server_id.strip()))
             if not guild or not guild.voice_client:
-                return await interaction.followup.send("❌ Bot is not in a VC in that server. Use /joinvc first.")
+                return await interaction.followup.send("❌ Bot not in VC.")
 
-            # Convert text to speech and save to a temp file
             tts = gTTS(text=my_words, lang='en')
             tts.save("tts.mp3")
 
             await self.play_audio(guild.voice_client, "tts.mp3")
-            await interaction.followup.send(f"🗣️ Speaking: \"{my_words}\"")
-            
+            await interaction.followup.send(f"🗣️ Speaking in `{guild.name}`")
         except Exception as e:
-            await interaction.followup.send(f"⚠️ TTS Error: `{e}`")
+            await interaction.followup.send(f"⚠️ Error: `{e}`")
 
     # 4. AUDIO ENGINE
     async def play_audio(self, vc, filename):
@@ -76,8 +75,6 @@ class Voice(commands.Cog):
             ffdl.install()
         
         if vc.is_playing(): vc.stop()
-        
-        # Play the local file
         vc.play(discord.FFmpegPCMAudio(filename, executable=self.ffmpeg_path))
 
 async def setup(bot):
