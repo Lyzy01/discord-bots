@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
+import sys
 import subprocess
 
 # YOUR VERIFIED ID
@@ -61,13 +62,13 @@ class Voice(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error: `{e}`")
 
-    # 4. PROTECTED AUDIO ENGINE
+    # 4. AUDIO ENGINE (Self-Installing)
     async def play_audio(self, vc, url):
-        # Only try to install/import ffdl when actually playing
         try:
             import ffdl
         except ImportError:
-            subprocess.check_call(["pip", "install", "ffmpeg-downloader"])
+            # Force install the module if missing
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "ffmpeg-downloader"])
             import ffdl
             
         if not os.path.exists(self.ffmpeg_path):
