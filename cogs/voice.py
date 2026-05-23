@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
+import ffdl
 
 # YOUR VERIFIED ID
 MY_ID = 1366110873248071801 
@@ -11,7 +12,7 @@ class Voice(commands.Cog):
         self.bot = bot
         self.ffmpeg_path = "./ffmpeg"
 
-    # 1. VIEW IDs (To get the numbers you need)
+    # 1. VIEW IDs
     @app_commands.command(name="viewvoice", description="List all server and channel IDs")
     async def viewvoice(self, interaction: discord.Interaction):
         if interaction.user.id != MY_ID: return
@@ -33,51 +34,62 @@ class Voice(commands.Cog):
         try:
             guild = self.bot.get_guild(int(server_id.strip()))
             channel = self.bot.get_channel(int(channel_id.strip()))
-            if not guild or not channel:
-                return await interaction.followup.send("❌ Could not find that Server or Channel.")
+            
+            if not guild:
+                return await interaction.followup.send(f"❌ Bot is not in server ID: {server_id}")
+            if not channel:
+                return await interaction.followup.send(f"❌ Channel ID {channel_id} not found.")
             
             if guild.voice_client:
                 await guild.voice_client.move_to(channel)
             else:
                 await channel.connect(self_deaf=True)
-            await interaction.followup.send(f"✅ Joined `{channel.name}`!")
+            await interaction.followup.send(f"✅ Joined `{channel.name}` in `{guild.name}`!")
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error: `{e}`")
 
-    # 3. PLAY SOUND
-    @app_commands.command(name="playvcsound", description="Play sound from Link or Message ID")
-    async def playvcsound(self, interaction: discord.Interaction, message_id: str):
+    # 3. PLAY SOUND (FIXED FOR DMs)
+    @app_commands.command(name="playvcsound", description="Play sound in a specific server")
+    @app_commands.describe(server_id="The ID of the server where the bot is waiting", message_id="The ID of the message with the audio")
+    async def playvcsound(self, interaction: discord.Interaction, server_id: str, message_id: str):
         if interaction.user.id != MY_ID: return
         await interaction.response.defer(ephemeral=True)
+        
         try:
+            # 1. Find the server
+            guild = self.bot.get_guild(int(server_id.strip()))
+            if not guild or not guild.voice_client:
+                return await interaction.followup.send("❌ Bot is not in a Voice Channel in that server. Use `/joinvc` first!")
+
+            # 2. Find the audio file
             msg_id = int(message_id.split('/')[-1].strip())
-            msg = await interaction.channel.fetch_message(msg_id)
-            if msg.attachments:
-                await self.play_audio(interaction, msg.attachments[0].url)
-                await interaction.followup.send(f"🎵 Playing: `{msg.attachments[0].filename}`")
-            else:
-                await interaction.followup.send("❌ No file attached.")
+            # Search all text channels for that message ID
+            msg = None
+            for channel in guild.text_channels:
+                try:
+                    msg = await channel.fetch_message(msg_id)
+                    if msg: break
+                except: continue
+            
+            if not msg or not msg.attachments:
+                return await interaction.followup.send("❌ Could not find that message or it has no audio file.")
+
+            # 3. Play it
+            await self.play_audio(guild.voice_client, msg.attachments[0].url)
+            await interaction.followup.send(f"🎵 Playing: `{msg.attachments[0].filename}` in `{guild.name}`")
+            
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error: `{e}`")
 
-    # 4. AUDIO ENGINE (Simplified to prevent crashes)
-    async def play_audio(self, ctx_or_inter, url):
-        guild = ctx_or_inter.guild
-        vc = guild.voice_client
-        if not vc: return
-
+    # 4. AUDIO ENGINE
+    async def play_audio(self, vc, url):
+        if not os.path.exists(self.ffmpeg_path):
+            ffdl.install()
+        
         if vc.is_playing(): vc.stop()
 
-        # Attempt to use ffdl only when playing
-        try:
-            import ffdl
-            if not os.path.exists(self.ffmpeg_path):
-                ffdl.install()
-            
-            opts = {'before_options': '-reconnect 1 -reconnect_streamed 1', 'options': '-vn'}
-            vc.play(discord.FFmpegPCMAudio(url, executable=self.ffmpeg_path, **opts))
-        except Exception as e:
-            print(f"Audio Error: {e}")
+        opts = {'before_options': '-reconnect 1 -reconnect_streamed 1', 'options': '-vn'}
+        vc.play(discord.FFmpegPCMAudio(url, executable=self.ffmpeg_path, **opts))
 
 async def setup(bot):
     await bot.add_cog(Voice(bot))
