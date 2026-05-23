@@ -69,15 +69,19 @@ class Voice(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error: `{e}`")
 
-    # 4. AUDIO ENGINE
+    # 4. AUDIO ENGINE (With Auto-Installer)
     async def play_audio(self, vc, url):
-        import ffdl
+        try:
+            import ffdl
+        except ImportError:
+            # If the library is missing, force install it now
+            os.system("pip install ffmpeg-downloader")
+            import ffdl
+            
         if not os.path.exists(self.ffmpeg_path):
+            print("📥 Downloading portable FFmpeg...")
             ffdl.install()
         
         if vc.is_playing(): vc.stop()
         opts = {'before_options': '-reconnect 1 -reconnect_streamed 1', 'options': '-vn'}
         vc.play(discord.FFmpegPCMAudio(url, executable=self.ffmpeg_path, **opts))
-
-async def setup(bot):
-    await bot.add_cog(Voice(bot))
